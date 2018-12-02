@@ -109,7 +109,6 @@ pub fn update_and_render(
             }
             if data.player.attacking {
                 for enemy in &mut data.enemies {
-
                 }
 
                 data.player.attack_counter -= dt;
@@ -117,7 +116,7 @@ pub fn update_and_render(
                     data.player.attacking = false;
                 }
             }
-            let acceleration = {
+            let direction = {
                 use KBKey::*;
                 let (left, right, _down, _up) = (
                     input.keyboard[A].is_down(),
@@ -125,35 +124,28 @@ pub fn update_and_render(
                     input.keyboard[S].is_down(),
                     input.keyboard[W].is_down(),
                 );
-                let acc = 20.0;
                 let x = match (left, right) {
-                    (false, true) =>  acc,
-                    (true, false) => -acc,
-                    _ => 0.0,
+                    (false, true) =>  1.0,
+                    (true, false) => -1.0,
+                    _             =>  0.0,
                 };
                 let _y = match (_down, _up) {
-                    (false, true) =>  acc,
-                    (true, false) => -acc,
-                    _ => 0.0,
+                    (false, true) =>  1.0,
+                    (true, false) => -1.0,
+                    _             =>  0.0,
                 };
-                let y = if input.keyboard[KBKey::K].pressed() { 100.0 } else { 0.0 };
+                let y = if input.keyboard[KBKey::K].pressed() { 1.0 } else { 0.0 };
                 v2!(x, y)
             };
-            entity_move(&mut data.player, &data.tilemap, acceleration, dt);
+            entity_move(&mut data.player, &data.tilemap, direction, dt);
 
             for enemy in &mut data.enemies {
-                let mut acceleration = v2!(0.0, 0.0);
                 if distance_sq(enemy.pos, data.player.pos) >= 4.0 {
-                    acceleration.x = if enemy.pos.x < data.player.pos.x {
-                        10.0
-                    } else {
-                        -10.0
-                    };
-                    if enemy.pos.y > data.player.pos.y {
-                        acceleration.y = 10.0;
-                    }
+                    let mut direction = v2!(0.0, 0.0);
+                    direction.x = if enemy.pos.x < data.player.pos.x { 1.0 } else { -1.0 };
+                    direction.y = if enemy.pos.y > data.player.pos.y { 1.0 } else {  0.0 };
+                    entity_move(enemy, &data.tilemap, direction, input.dt);
                 }
-                entity_move(enemy, &data.tilemap, acceleration, input.dt);
             }
 
             let screen_center = v2!(
@@ -174,19 +166,9 @@ pub fn update_and_render(
 
             render::clear(screen, Color::BLACK);
             data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
-            player_draw(
-                &data.player,
-                data,
-                screen,
-                data.camera_pos,
-            );
+            player_draw(&data.player, data, screen, data.camera_pos);
             for enemy in &data.enemies {
-                enemy_draw(
-                    enemy,
-                    data,
-                    screen,
-                    data.camera_pos,
-                );
+                enemy_draw(enemy, data, screen, data.camera_pos);
             }
         }
         GameState::LevelEditor => {
@@ -235,30 +217,15 @@ pub fn update_and_render(
 
             render::clear(screen, Color::BLACK);
             data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
-            /*
-            render::fill_rect(
-                screen,
-                (screen.width as f32 * 0.8) as i32,
-                0,
-                screen.width,
-                screen.height,
-                Color::PURPLE,
-            );
-            render::fill_rect(
-                screen,
-                0,
-                (screen.height as f32 * 0.8) as i32,
-                (screen.width as f32 * 0.8) as i32,
-                screen.height,
-                Color::PURPLE,
-            );
-            */
+
+            let thickness = 4;
+            render::fill_rect(screen, 0, 0, thickness, screen.height, Color::YELLOW);
+            render::fill_rect(screen, screen.width - thickness, 0, screen.width, screen.height, Color::YELLOW);
+            render::fill_rect(screen, 0, 0, screen.width, thickness, Color::YELLOW);
+            render::fill_rect(screen, 0, screen.height - thickness, screen.width, screen.height, Color::YELLOW);
         }
     }
-    format!(", {}", match data.player.facing_direction {
-        FacingDirection::Right => '>',
-        FacingDirection::Left  => '<',
-    })
+    format!("")
 }
 
 struct Size {
@@ -328,23 +295,18 @@ impl std::fmt::Display for Entity {
 }
 
 //TODO: derive consts from height and length of a desired jump
-fn entity_move(entity: &mut Entity, tilemap: &Tilemap, mut acceleration: V2, dt: f32) {
-    if acceleration.x > 0.0 {
-        entity.facing_direction = FacingDirection::Right;
-    } else if acceleration.x < 0.0 {
-        entity.facing_direction = FacingDirection::Left;
-    }
+fn entity_move(entity: &mut Entity, tilemap: &Tilemap, mut direction: V2, dt: f32) {
+    assert!(direction.x >= -1.0);
+    assert!(direction.x <= 1.0);
+    assert!(direction.y >= -1.0);
+    assert!(direction.y <= 1.0);
 
-    if !entity.on_the_ground {
-        acceleration.x *= 0.5;
-    }
-    entity.vel.x += acceleration.x * dt;
+    let mut acc = direction * 100.0;
+    let mut dx = 0.5 * acc.x * dt*dt + entity.vel.x * dt;
+    entity.vel.x = acc.x * dt;
+
     clamp(&mut entity.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
 
-    if entity.on_the_ground && acceleration.x == 0.0 {
-        entity.vel.x *= 0.8;
-    }
-    let mut dx = entity.vel.x * dt;
     if dx != 0.0 {
         if let Some(tile_collided_x) = h_tilemap_collision(
             entity,
@@ -362,8 +324,7 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, mut acceleration: V2, dt:
     entity.pos.x += dx;
 
 
-
-    if entity.on_the_ground && acceleration.y > 0.0 {
+    if entity.on_the_ground && direction.y > 0.0 {
         entity.vel.y = 10.0;
         entity.on_the_ground = false;
     } else {
@@ -388,6 +349,12 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, mut acceleration: V2, dt:
         }
     }
     entity.pos.y += dy;
+
+    if direction.x > 0.0 {
+        entity.facing_direction = FacingDirection::Right;
+    } else if direction.x < 0.0 {
+        entity.facing_direction = FacingDirection::Left;
+    }
 }
 
 fn player_draw(

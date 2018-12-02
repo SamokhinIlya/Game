@@ -1,7 +1,4 @@
-use core::{
-    ptr,
-    mem,
-};
+use core::{ ptr, mem };
 use platform::{
     graphics::Bitmap,
     file::{File, Load, LoadErr},
@@ -14,7 +11,7 @@ pub const TILE_SIZE: i32 = 64;
 pub const H_DRAW_TILES: i32 = 16;
 pub const V_DRAW_TILES: i32 = 11;
 pub const SCREEN_WIDTH_IN_TILES: f32 = 15.0;
-pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.45;
+pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.45; //FIXME: not quite
 
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: (i32, i32),
@@ -138,57 +135,6 @@ impl Tilemap {
                 render::draw_bmp(dst_bmp, tile_bmp, x0, y0 - TILE_SIZE);
             }
         }
-        let (top_x0, top_y0) = tilemap_pos_to_screen_pos(
-            v2!(0.0, self.height as f32 - 1.0),
-            camera,
-            (dst_bmp.width, dst_bmp.height)
-        );
-        let (top_x1, top_y1) = (top_x0 + self.width * TILE_SIZE, top_y0 + 1);
-
-        let (bottom_x0, bottom_y0) = tilemap_pos_to_screen_pos(
-            v2!(0.0, -1.0),
-            camera,
-            (dst_bmp.width, dst_bmp.height)
-        );
-        let (bottom_x1, bottom_y1) = (bottom_x0 + self.width * TILE_SIZE, bottom_y0 + 1);
-
-        let (left_x0, left_y0) = tilemap_pos_to_screen_pos(
-            v2!(0.0, self.height as f32 - 1.0),
-            camera,
-            (dst_bmp.width, dst_bmp.height)
-        );
-        let (left_x1, left_y1) = (left_x0 + 1, left_y0 + self.height * TILE_SIZE);
-
-        let (right_x0, right_y0) = tilemap_pos_to_screen_pos(
-            v2!(self.width as f32, self.height as f32 - 1.0),
-            camera,
-            (dst_bmp.width, dst_bmp.height)
-        );
-        let (right_x1, right_y1) = (right_x0 + 1, right_y0 + self.height * TILE_SIZE);
-        render::fill_rect(
-            dst_bmp,
-            top_x0, top_y0,
-            top_x1, top_y1,
-            Color::RED,
-        );
-        render::fill_rect(
-            dst_bmp,
-            bottom_x0, bottom_y0,
-            bottom_x1, bottom_y1,
-            Color::RED,
-        );
-        render::fill_rect(
-            dst_bmp,
-            left_x0, left_y0,
-            left_x1, left_y1,
-            Color::RED,
-        );
-        render::fill_rect(
-            dst_bmp,
-            right_x0, right_y0,
-            right_x1, right_y1,
-            Color::RED,
-        );
     }
 }
 
