@@ -1,0 +1,20 @@
+[package]
+name = "platform-internal"
+version = "0.1.0"
+authors = ["SamokhinIlya <samokhin.ilya.97@gmail.com>"]
+
+[dependencies]
+[dependencies.winapi]
+version = "0.3.6"
+features = [
+    "winuser",
+    "libloaderapi",
+    "wingdi",
+    "heapapi",
+    "errhandlingapi",
+    "winbase",
+    "profileapi",
+    "handleapi",
+]
+[dependencies.platform]
+path = "../platform"

@@ -1,0 +1,8 @@
+[package]
+name = "render"
+version = "0.1.0"
+authors = ["SamokhinIlya <samokhin.ilya.97@gmail.com>"]
+
+[dependencies]
+utils = { path = "../utils" }
+platform = { path = "../../platform" }

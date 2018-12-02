@@ -1,0 +1,9 @@
+[package]
+name = "game"
+version = "0.1.0"
+authors = ["SamokhinIlya <samokhin.ilya.97@gmail.com>"]
+
+[dependencies]
+utils = { path = "utils" }
+render = { path = "render" }
+platform = { path = "../platform" }
