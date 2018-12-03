@@ -35,6 +35,13 @@ impl Mul<f32> for V2 {
     }
 }
 
+impl Mul<V2> for f32 {
+    type Output = V2;
+    fn mul(self, v: V2) -> V2 {
+        v * self
+    }
+}
+
 pub fn dot(lhs: V2, rhs: V2) -> f32 {
     lhs.x * rhs.x + lhs.y * rhs.y
 }

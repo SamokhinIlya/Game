@@ -140,12 +140,12 @@ pub fn update_and_render(
             entity_move(&mut data.player, &data.tilemap, direction, dt);
 
             for enemy in &mut data.enemies {
+                let mut direction = v2!(0.0, 0.0);
                 if distance_sq(enemy.pos, data.player.pos) >= 4.0 {
-                    let mut direction = v2!(0.0, 0.0);
                     direction.x = if enemy.pos.x < data.player.pos.x { 1.0 } else { -1.0 };
                     direction.y = if enemy.pos.y > data.player.pos.y { 1.0 } else {  0.0 };
-                    entity_move(enemy, &data.tilemap, direction, input.dt);
                 }
+                entity_move(enemy, &data.tilemap, direction, input.dt);
             }
 
             let screen_center = v2!(
@@ -264,13 +264,17 @@ enum FacingDirection {
 
 impl Entity {
     const MAX_VELOCITY: V2 = v2!(6.0, 13.0);
-    const COLLISION_BOUNDARY: V2 = v2!(0.5 - 1.0 / 8.0, 0.5 - 0.001);
 
     pub fn new() -> Self {
         Self {
             pos: v2!(1.5, 1.5),
             vel: v2!(0.0, 0.0),
-            size: Size::with_symmetric_offset(Self::COLLISION_BOUNDARY),
+            size: Size {
+                top_offset:      0.5 - 1.0 / 9.0,
+                bottom_offset: -(0.5 - 0.001),
+                right_offset:    0.5 - 1.0 / 8.0,
+                left_offset:   -(0.5 - 1.0 / 8.0),
+            },
             health: 1,
             facing_direction: FacingDirection::Right,
             on_the_ground: false,
@@ -295,30 +299,30 @@ impl std::fmt::Display for Entity {
 }
 
 //TODO: derive consts from height and length of a desired jump
-fn entity_move(entity: &mut Entity, tilemap: &Tilemap, mut direction: V2, dt: f32) {
-    assert!(direction.x >= -1.0);
-    assert!(direction.x <= 1.0);
-    assert!(direction.y >= -1.0);
-    assert!(direction.y <= 1.0);
+fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
+    assert!(direction.x >= -1.0 && direction.x <= 1.0
+         && direction.y >= -1.0 && direction.y <= 1.0, "direction = {}", direction);
 
-    //FIXME: 
-    let mut acc = direction * 100.0;
-    let mut dx = 0.5 * acc.x * dt*dt + entity.vel.x * dt;
-    entity.vel.x = acc.x * dt;
+    const ACCELERATION: f32 = 50.0;
 
+    let acc_x = if entity.on_the_ground {
+        let friction = -8.0 * entity.vel.x;
+        direction.x * ACCELERATION + friction
+    } else {
+        let air_movement_penalty = -direction.x * ACCELERATION * 0.8;
+        direction.x * ACCELERATION + air_movement_penalty
+    };
+    let mut dx = 0.5 * acc_x * dt*dt + entity.vel.x * dt;
+    entity.vel.x += acc_x * dt;
     clamp(&mut entity.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
 
     if dx != 0.0 {
-        if let Some(tile_collided_x) = h_tilemap_collision(
-            entity,
-            tilemap,
-            dx,
-        ) {
+        if let Some(tile_x) = h_tilemap_collision(entity, tilemap, dx) {
             entity.vel.x = 0.0;
             dx = if dx > 0.0 {
-                tile_collided_x as f32 - entity.pos.x - Entity::COLLISION_BOUNDARY.x * 1.01
+                tile_x       as f32 - entity.pos.x - entity.size.right_offset * 1.01
             } else {
-                (tile_collided_x + 1) as f32 - entity.pos.x + Entity::COLLISION_BOUNDARY.x * 1.01
+                (tile_x + 1) as f32 - entity.pos.x - entity.size.left_offset  * 1.01
             }
         }
     }
@@ -333,20 +337,19 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, mut direction: V2, dt: f3
         entity.vel.y += 0.5 * GRAVITY * dt;
     }
     clamp(&mut entity.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
+
     let mut dy = entity.vel.y * dt;
     if dy != 0.0 {
-        if let Some(tile_collided_y) = v_tilemap_collision(
-            entity,
-            tilemap,
-            dy,
-        ) {
+        if let Some(tile_y) = v_tilemap_collision(entity, tilemap, dy) {
             dy = if dy > 0.0 {
                 entity.vel.y = 0.0;
-                tile_collided_y as f32 - entity.pos.y - Entity::COLLISION_BOUNDARY.y * 1.01
+                tile_y       as f32 - entity.pos.y - entity.size.top_offset    * 1.01
             } else {
                 entity.on_the_ground = true;
-                (tile_collided_y + 1) as f32 - entity.pos.y + Entity::COLLISION_BOUNDARY.y * 1.01
+                (tile_y + 1) as f32 - entity.pos.y - entity.size.bottom_offset * 1.01
             }
+        } else if entity.on_the_ground {
+            entity.on_the_ground = false;
         }
     }
     entity.pos.y += dy;
