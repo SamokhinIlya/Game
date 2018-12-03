@@ -301,6 +301,7 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, mut direction: V2, dt: f3
     assert!(direction.y >= -1.0);
     assert!(direction.y <= 1.0);
 
+    //FIXME: 
     let mut acc = direction * 100.0;
     let mut dx = 0.5 * acc.x * dt*dt + entity.vel.x * dt;
     entity.vel.x = acc.x * dt;
