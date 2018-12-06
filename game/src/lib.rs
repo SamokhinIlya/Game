@@ -7,6 +7,7 @@ extern crate utils;
 mod vector;
 mod tilemap;
 
+use core::convert::From;
 use platform::{
     file,
     file::Load,
@@ -107,27 +108,31 @@ pub fn update_and_render(
                 render::clear(screen, Color::BLACK);
             }
 
-            data.player.attack = match data.player.attack {
-                Some(timer) => {
-                    for enemy in &mut data.enemies {
-                        if entity_collision(&data.player, enemy) {
-                            collision = true;
-                            enemy.health -= 1;
-                        }
+            if data.player.attacking {
+                for enemy in &mut data.enemies {
+                    let offset_x = match data.player.facing_direction {
+                        FacingDirection::Right => 1.0,
+                        FacingDirection::Left => -1.0,
+                    };
+                    let offset = v2!(offset_x, 0.0);
+                    if aabb_collision(
+                        Rect2::from_center_size(data.player.pos + offset, data.player.size),
+                        Rect2::from_center_size(enemy.pos, enemy.size),
+                    ) {
+                        enemy.health -= 1;
                     }
-
-                    data.player.attack_counter -= dt;
-                    if data.player.attack_counter < 0.0 {
-                        data.player.attacking = false;
-                    }
-                },
-                None => if input.keyboard[KBKey::J].pressed() {
-                    Timer::set(0.3)
-                } else {
-                    None
                 }
+                data.player.attack_counter -= dt;
+                if data.player.attack_counter < 0.0 {
+                    data.player.attacking = false;
+                }
+            } else {
+                if input.keyboard[KBKey::J].pressed() {
+                    data.player.attacking = true;
+                    data.player.attack_counter = 0.2;
+                } 
             }
-            if data.player.attacking 
+
             let direction = {
                 use KBKey::*;
                 let (left, right, _down, _up) = (
@@ -237,33 +242,10 @@ pub fn update_and_render(
             render::fill_rect(screen, 0, screen.height - thickness, screen.width, screen.height, Color::YELLOW);
         }
     }
+    format!("")
 }
 
-struct Timer(f32);
-
-impl Timer {
-    pub fn new() -> Option<Self> {
-        None
-    }
-
-    pub fn set(seconds: f32) -> Option<Self> {
-        if seconds > 0.0 {
-            Some(Timer(seconds))
-        } else {
-            None
-        }
-    }
-
-    pub fn tick(self, elapsed: f32) -> Option<Self> {
-        let new_count = self.0 - elapsed;
-        if new_count <= 0.0 {
-            None
-        } else {
-            Some(Timer(new_count))
-        }
-    }
-}
-
+#[derive(Copy, Clone, Debug)]
 struct Size {
     pub top_offset: f32,
     pub bottom_offset: f32,
@@ -289,7 +271,8 @@ struct Entity {
     pub health: i32,
     pub facing_direction: FacingDirection,
     pub on_the_ground: bool,
-    pub attack: Option<Timer>,
+    pub attacking: bool,
+    pub attack_counter: f32,
 }
 
 enum FacingDirection {
@@ -313,7 +296,8 @@ impl Entity {
             health: 1,
             facing_direction: FacingDirection::Right,
             on_the_ground: false,
-            attack: Timer::new(),
+            attacking: false,
+            attack_counter: 0.0,
         }
     }
 
@@ -454,11 +438,43 @@ fn enemy_draw(
     render::draw_bmp(screen, bmp, x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2);
 }
 
-fn entity_aabb_collision(e0: &Entity, e1: &Entity) -> bool {
-    e0.pos.x + e0.size.right_offset > e1.pos.x + e1.size.left_offset
-    && e0.pos.x + e0.size.left_offset < e1.pos.x + e1.size.right_offset
-    && e0.pos.y + e0.size.top_offset > e1.pos.y + e1.size.bottom_offset
-    && e0.pos.y + e0.size.bottom_offset < e1.pos.y + e1.size.top_offset
+fn entity_collision(e0: &Entity, e1: &Entity) -> bool {
+    aabb_collision(
+        Rect2::from_center_size(e0.pos, e0.size),
+        Rect2::from_center_size(e1.pos, e1.size),
+    )
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Rect2(V2, V2);
+
+impl Rect2 {
+    pub fn from_bb(v0: V2, v1: V2) -> Self {
+        Rect2(v0, v1)
+    }
+
+    pub fn from_center_size(center: V2, size: Size) -> Self {
+        Rect2(
+            v2!(center.x + size.left_offset, center.y + size.bottom_offset),
+            v2!(center.x + size.right_offset, center.y + size.top_offset),
+        )
+    }
+    
+    #[inline]
+    pub fn right(self)  -> f32 { self.1.x }
+    #[inline]
+    pub fn left(self)   -> f32 { self.0.x }
+    #[inline]
+    pub fn top(self)    -> f32 { self.1.y }
+    #[inline]
+    pub fn bottom(self) -> f32 { self.0.y }
+}
+
+fn aabb_collision(rect0: Rect2, rect1: Rect2) -> bool {
+    rect0.right() > rect1.left()
+    && rect0.left() < rect1.right()
+    && rect0.top() > rect1.bottom()
+    && rect0.bottom() < rect1.top()
 }
 
 fn h_tilemap_collision(
