@@ -53,12 +53,16 @@ struct GameData {
     pub enemies: [Entity; 1],
 
     pub tile_bitmaps: [Bitmap; 1],
-    pub player_bmp_right: Bitmap,
-    pub player_bmp_left: Bitmap,
-    pub player_attack_bmp_right: Bitmap,
-    pub player_attack_bmp_left: Bitmap,
+    pub player_bmps: PlayerBmps,
     pub enemy_bmp_right: Bitmap,
     pub enemy_bmp_left: Bitmap,
+}
+
+struct PlayerBmps {
+    pub right: Bitmap,
+    pub left: Bitmap,
+    pub attack_right: Bitmap,
+    pub attack_left: Bitmap,
 }
 
 pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut Opaque {
@@ -74,10 +78,12 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut Opaque {
             camera_pos: v2!(0.0, 0.0),
             enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 1); 1],
             tile_bitmaps: [Bitmap::load("data/sprites/size_64/test_tile.bmp").unwrap(); 1],
-            player_bmp_right: Bitmap::load("data/sprites/size_64/test_player_right.bmp").unwrap(),
-            player_bmp_left: Bitmap::load("data/sprites/size_64/test_player_left.bmp").unwrap(),
-            player_attack_bmp_right: Bitmap::load("data/sprites/size_64/test_player_attack_right.bmp").unwrap(),
-            player_attack_bmp_left: Bitmap::load("data/sprites/size_64/test_player_attack_left.bmp").unwrap(),
+            player_bmps: PlayerBmps {
+                right: Bitmap::load("data/sprites/size_64/test_player_right.bmp").unwrap(),
+                left: Bitmap::load("data/sprites/size_64/test_player_left.bmp").unwrap(),
+                attack_right: Bitmap::load("data/sprites/size_64/test_player_attack_right.bmp").unwrap(),
+                attack_left: Bitmap::load("data/sprites/size_64/test_player_attack_left.bmp").unwrap(),
+            },
             enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
             enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
         })
@@ -101,21 +107,27 @@ pub fn update_and_render(
                 render::clear(screen, Color::BLACK);
             }
 
-            if !data.player.attacking {
-                if input.keyboard[KBKey::J].pressed() {
-                    data.player.attacking = true;
-                    data.player.attack_counter = 0.3;
-                }
-            }
-            if data.player.attacking {
-                for enemy in &mut data.enemies {
-                }
+            data.player.attack = match data.player.attack {
+                Some(timer) => {
+                    for enemy in &mut data.enemies {
+                        if entity_collision(&data.player, enemy) {
+                            collision = true;
+                            enemy.health -= 1;
+                        }
+                    }
 
-                data.player.attack_counter -= dt;
-                if data.player.attack_counter < 0.0 {
-                    data.player.attacking = false;
+                    data.player.attack_counter -= dt;
+                    if data.player.attack_counter < 0.0 {
+                        data.player.attacking = false;
+                    }
+                },
+                None => if input.keyboard[KBKey::J].pressed() {
+                    Timer::set(0.3)
+                } else {
+                    None
                 }
             }
+            if data.player.attacking 
             let direction = {
                 use KBKey::*;
                 let (left, right, _down, _up) = (
@@ -143,7 +155,7 @@ pub fn update_and_render(
                 let mut direction = v2!(0.0, 0.0);
                 if distance_sq(enemy.pos, data.player.pos) >= 4.0 {
                     direction.x = if enemy.pos.x < data.player.pos.x { 1.0 } else { -1.0 };
-                    direction.y = if enemy.pos.y > data.player.pos.y { 1.0 } else {  0.0 };
+                    direction.y = if enemy.pos.y < data.player.pos.y { 1.0 } else {  0.0 };
                 }
                 entity_move(enemy, &data.tilemap, direction, input.dt);
             }
@@ -225,7 +237,31 @@ pub fn update_and_render(
             render::fill_rect(screen, 0, screen.height - thickness, screen.width, screen.height, Color::YELLOW);
         }
     }
-    format!("")
+}
+
+struct Timer(f32);
+
+impl Timer {
+    pub fn new() -> Option<Self> {
+        None
+    }
+
+    pub fn set(seconds: f32) -> Option<Self> {
+        if seconds > 0.0 {
+            Some(Timer(seconds))
+        } else {
+            None
+        }
+    }
+
+    pub fn tick(self, elapsed: f32) -> Option<Self> {
+        let new_count = self.0 - elapsed;
+        if new_count <= 0.0 {
+            None
+        } else {
+            Some(Timer(new_count))
+        }
+    }
 }
 
 struct Size {
@@ -253,8 +289,7 @@ struct Entity {
     pub health: i32,
     pub facing_direction: FacingDirection,
     pub on_the_ground: bool,
-    pub attacking: bool,
-    pub attack_counter: f32,
+    pub attack: Option<Timer>,
 }
 
 enum FacingDirection {
@@ -278,8 +313,7 @@ impl Entity {
             health: 1,
             facing_direction: FacingDirection::Right,
             on_the_ground: false,
-            attacking: false,
-            attack_counter: 0.0,
+            attack: Timer::new(),
         }
     }
 
@@ -368,14 +402,35 @@ fn player_draw(
     camera: V2,
 ) {
     let bmp = match entity.facing_direction {
-        FacingDirection::Right => &game_data.player_bmp_right,
-        FacingDirection::Left => &game_data.player_bmp_left,
+        FacingDirection::Right => &game_data.player_bmps.right,
+        FacingDirection::Left => &game_data.player_bmps.left,
     };
     let (x0, y0) = tilemap_pos_to_screen_pos(
         entity.pos,
         camera,
         (screen.width, screen.height),
     );
+    render::draw_bmp(screen, bmp, x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2);
+
+    if !entity.attacking { return }
+    let bmp = match entity.facing_direction {
+        FacingDirection::Right => &game_data.player_bmps.attack_right,
+        FacingDirection::Left => &game_data.player_bmps.attack_left,
+    };
+    let (x0, y0) = {
+        let attack_pos = v2!(
+            entity.pos.x + match entity.facing_direction {
+                FacingDirection::Right => 1.0,
+                FacingDirection::Left => -1.0,
+            },
+            entity.pos.y
+        );
+        tilemap_pos_to_screen_pos(
+            attack_pos,
+            camera,
+            (screen.width, screen.height),
+        )
+    };
     render::draw_bmp(screen, bmp, x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2);
 }
 
@@ -385,6 +440,8 @@ fn enemy_draw(
     screen: &Bitmap,
     camera: V2,
 ) {
+    if entity.health <= 0 { return }
+
     let bmp = match entity.facing_direction {
         FacingDirection::Right => &game_data.enemy_bmp_right,
         FacingDirection::Left => &game_data.enemy_bmp_left,
@@ -397,8 +454,11 @@ fn enemy_draw(
     render::draw_bmp(screen, bmp, x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2);
 }
 
-fn entity_collision(ent0: &Entity, ent1: &Entity) -> bool {
-    false
+fn entity_aabb_collision(e0: &Entity, e1: &Entity) -> bool {
+    e0.pos.x + e0.size.right_offset > e1.pos.x + e1.size.left_offset
+    && e0.pos.x + e0.size.left_offset < e1.pos.x + e1.size.right_offset
+    && e0.pos.y + e0.size.top_offset > e1.pos.y + e1.size.bottom_offset
+    && e0.pos.y + e0.size.bottom_offset < e1.pos.y + e1.size.top_offset
 }
 
 fn h_tilemap_collision(
