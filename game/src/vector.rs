@@ -14,6 +14,12 @@ macro_rules! v2 {
     };
 }
 
+impl V2 {
+    pub fn new() -> Self {
+        v2!(0.0, 0.0)
+    }
+}
+
 impl Add for V2 {
     type Output = V2;
     fn add(self, rhs: V2) -> V2 {

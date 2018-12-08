@@ -22,6 +22,9 @@ impl Bitmap {
             height,
         }
     }
+
+    #[inline]
+    pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
 }
 
 impl file::Load for Bitmap {
