@@ -4,7 +4,7 @@ use platform::{
     file::{File, Load, LoadErr},
 };
 use render::Color;
-use vector::V2;
+use crate::vector::V2;
 
 pub const TILE_SIZE: i32 = 64;
 //FIXME: these should be derived from TILE_SIZE and screen_size

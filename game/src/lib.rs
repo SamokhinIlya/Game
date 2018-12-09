@@ -1,13 +1,4 @@
 extern crate core;
-extern crate platform;
-extern crate render;
-extern crate utils;
-
-#[macro_use]
-mod vector;
-mod tilemap;
-
-use core::convert::From;
 use platform::{
     file,
     file::Load,
@@ -17,11 +8,16 @@ use platform::{
 };
 use render::Color;
 use utils::*;
-use vector::{
+
+#[macro_use]
+mod vector;
+mod tilemap;
+
+use crate::vector::{
     V2,
     distance_sq,
 };
-use tilemap::{
+use crate::tilemap::{
     Tilemap,
     Tile,
     TILE_SIZE,
@@ -114,7 +110,7 @@ pub fn update_and_render(
             }
 
             let direction = {
-                use KBKey::*;
+                use platform::input::KBKey::*;
                 let (left, right, _down, _up) = (
                     input.keyboard[A].is_down(),
                     input.keyboard[D].is_down(),
@@ -145,12 +141,13 @@ pub fn update_and_render(
                 }
 
                 data.player_attack_counter -= dt;
-                data.player_attack.pos.x = v2!(
+                //FIXME: try jump and attack
+                data.player_attack.pos = v2!(
                     data.player.pos.x + match data.player.facing_direction {
                         FacingDirection::Right => 1.0,
                         FacingDirection::Left => -1.0,
                     },
-                    data.player.pos.y
+                    data.player.pos.y,
                 );
                 if data.player_attack_counter < 0.0 {
                     data.player_attack.health = 0;

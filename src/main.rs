@@ -1,9 +1,3 @@
-extern crate core;
-extern crate winapi;
-extern crate platform_internal;
-extern crate platform;
-extern crate game;
-
 use core::{mem, ptr};
 use platform::*;
 use platform_internal::*;
@@ -28,7 +22,7 @@ fn main() {
     while running {
         let frame_counter = time::Counter::start();
 
-        use input::KBKey;
+        use platform::input::KBKey;
         running = process_messages();
         {
             if window.is_active() {
@@ -44,7 +38,7 @@ fn main() {
                     input.keyboard[key].update(false);
                 }
             }
-            use input::MouseKey;
+            use platform::input::MouseKey;
             let mut mouse_point = unsafe { mem::uninitialized() };
             if unsafe { GetCursorPos(&mut mouse_point) } == 0 {
                 debug::panic_with_last_error_message("GetCursorPos");

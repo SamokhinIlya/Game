@@ -2,6 +2,7 @@
 name = "game_and_engine"
 version = "0.1.0"
 authors = ["SamokhinIlya <samokhin.ilya.97@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 [dependencies.winapi]
