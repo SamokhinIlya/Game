@@ -3,7 +3,6 @@ use platform::{
     graphics::Bitmap,
     file::{File, Load, LoadErr},
 };
-use render::Color;
 use crate::vector::V2;
 
 pub const TILE_SIZE: i32 = 64;
@@ -153,6 +152,7 @@ impl Load for Tilemap {
 
 impl core::convert::From<File> for Tilemap {
     fn from(file: File) -> Self {
+        #[allow(clippy::cast_ptr_alignment)]
         unsafe { ptr::read(file.data as *mut Self) }
     }
 }

@@ -98,191 +98,213 @@ pub fn update_and_render(
     input:     &Input,
     game_data: *mut Opaque,
 ) -> String {
-    let data: &mut GameData = unsafe { (game_data as *mut GameData).as_mut().unwrap() };
+    #[allow(clippy::cast_ptr_alignment)]
+    let data: &mut GameData = unsafe {
+        (game_data as *mut GameData).as_mut().unwrap()
+    };
     let dt = input.dt;
 
     match data.state {
-        GameState::Playing => {
-            if input.keyboard[KBKey::K].pressed()
-            && input.keyboard[KBKey::Ctrl].is_down() {
-                data.state = GameState::LevelEditor;
-                render::clear(screen, Color::BLACK);
-            }
+        GameState::Playing => playing(screen, input, data, dt),
+        GameState::LevelEditor => level_editor(screen, input, data, dt),
+    }
+}
 
-            let direction = {
-                use platform::input::KBKey::*;
-                let (left, right, _down, _up) = (
-                    input.keyboard[A].is_down(),
-                    input.keyboard[D].is_down(),
-                    input.keyboard[S].is_down(),
-                    input.keyboard[W].is_down(),
-                );
-                let x = match (left, right) {
-                    (false, true) =>  1.0,
-                    (true, false) => -1.0,
-                    _             =>  0.0,
-                };
-                let _y = match (_down, _up) {
-                    (false, true) =>  1.0,
-                    (true, false) => -1.0,
-                    _             =>  0.0,
-                };
-                let y = if input.keyboard[KBKey::K].pressed() { 1.0 } else { 0.0 };
-                v2!(x, y)
-            };
-            if data.player_attack.health > 0 {
-                for enemy in &mut data.enemies {
-                    if aabb_collision(
-                        Rect2::from_center_size(data.player_attack.pos, data.player_attack.size),
-                        Rect2::from_center_size(enemy.pos, enemy.size),
-                    ) {
-                        enemy.health -= 1;
-                    }
-                }
+#[allow(clippy::useless_format)]
+fn playing(
+    screen: &mut Bitmap,
+    input:  &Input,
+    data:   &mut GameData,
+    dt:     f32,
+) -> String {
+    if input.keyboard[KBKey::K].pressed()
+    && input.keyboard[KBKey::Ctrl].is_down() {
+        data.state = GameState::LevelEditor;
+        render::clear(screen, Color::BLACK);
+    }
 
-                data.player_attack_counter -= dt;
-                //FIXME: try jump and attack
-                data.player_attack.pos = v2!(
-                    data.player.pos.x + match data.player.facing_direction {
-                        FacingDirection::Right => 1.0,
-                        FacingDirection::Left => -1.0,
-                    },
-                    data.player.pos.y,
-                );
-                if data.player_attack_counter < 0.0 {
-                    data.player_attack.health = 0;
-                }
-            } else {
-                if direction.x > 0.0 {
-                    data.player.facing_direction = FacingDirection::Right;
-                } else if direction.x < 0.0 {
-                    data.player.facing_direction = FacingDirection::Left;
-                }
-
-                if input.keyboard[KBKey::J].pressed() {
-                    data.player_attack_counter = 0.1;
-
-                    data.player_attack.health = 1;
-                    data.player_attack.pos = v2!(
-                        data.player.pos.x + match data.player.facing_direction {
-                            FacingDirection::Right => 1.0,
-                            FacingDirection::Left => -1.0,
-                        },
-                        data.player.pos.y
-                    );
-                    data.player_attack.facing_direction = data.player.facing_direction;
-                } 
-            }
-            entity_move(&mut data.player, &data.tilemap, direction, dt);
-
-            for enemy in &mut data.enemies {
-                let mut direction = v2!(0.0, 0.0);
-                if distance_sq(enemy.pos, data.player.pos) >= 4.0 {
-                    direction.x = if enemy.pos.x < data.player.pos.x { 1.0 } else { -1.0 };
-                    direction.y = if enemy.pos.y < data.player.pos.y { 1.0 } else {  0.0 };
-                }
-                if direction.x > 0.0 {
-                    enemy.facing_direction = FacingDirection::Right;
-                } else if direction.x < 0.0 {
-                    enemy.facing_direction = FacingDirection::Left;
-                }
-                entity_move(enemy, &data.tilemap, direction, input.dt);
-            }
-
-            let screen_center = v2!(
-                SCREEN_WIDTH_IN_TILES as f32 / 2.0,
-                SCREEN_HEIGHT_IN_TILES as f32 / 2.0,
-            );
-            data.camera_pos = data.player.pos - screen_center;
-            clamp(
-                &mut data.camera_pos.x,
-                0.0,
-                data.tilemap.width as f32 - SCREEN_WIDTH_IN_TILES,
-            );
-            clamp(
-                &mut data.camera_pos.y,
-                0.0,
-                data.tilemap.height as f32 - SCREEN_HEIGHT_IN_TILES,
-            );
-
-            render::clear(screen, Color::BLACK);
-            data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
-
-            let bmp = match data.player.facing_direction {
-                FacingDirection::Right => &data.player_bmps.right,
-                FacingDirection::Left => &data.player_bmps.left,
-            };
-            data.player.draw(screen, bmp, data.camera_pos);
-            if data.player_attack.health > 0 {
-                let bmp = match data.player_attack.facing_direction {
-                    FacingDirection::Right => &data.player_bmps.attack_right,
-                    FacingDirection::Left => &data.player_bmps.attack_left,
-                };
-                data.player_attack.draw(screen, bmp, data.camera_pos);
-            }
-
-            for enemy in &data.enemies {
-                let bmp = match enemy.facing_direction {
-                    FacingDirection::Right => &data.enemy_bmp_right,
-                    FacingDirection::Left => &data.enemy_bmp_left,
-                };
-                enemy.draw(screen, bmp, data.camera_pos);
+    let direction = {
+        use platform::input::KBKey::*;
+        let (left, right, _down, _up) = (
+            input.keyboard[A].is_down(),
+            input.keyboard[D].is_down(),
+            input.keyboard[S].is_down(),
+            input.keyboard[W].is_down(),
+        );
+        let x = match (left, right) {
+            (false, true) =>  1.0,
+            (true, false) => -1.0,
+            _             =>  0.0,
+        };
+        let _y = match (_down, _up) {
+            (false, true) =>  1.0,
+            (true, false) => -1.0,
+            _             =>  0.0,
+        };
+        let y = if input.keyboard[KBKey::K].pressed() { 1.0 } else { 0.0 };
+        v2!(x, y)
+    };
+    if data.player_attack.health > 0 {
+        for enemy in &mut data.enemies {
+            if aabb_collision(
+                Rect2::from_center_size(data.player_attack.pos, data.player_attack.size),
+                Rect2::from_center_size(enemy.pos, enemy.size),
+            ) {
+                enemy.health -= 1;
             }
         }
-        GameState::LevelEditor => {
-            if input.keyboard[KBKey::K].pressed()
-            && input.keyboard[KBKey::Ctrl].is_down()
-            {
-                data.state = GameState::Playing;
-            }
 
-            if input.keyboard[KBKey::S].pressed()
-            && input.keyboard[KBKey::Ctrl].is_down()
-            {
-                file::File::write("data/levels/map_00", &data.tilemap).unwrap();
-            }
+        data.player_attack_counter -= dt;
+        //FIXME: try jump and attack
+        data.player_attack.pos = v2!(
+            data.player.pos.x + match data.player.facing_direction {
+                FacingDirection::Right => 1.0,
+                FacingDirection::Left => -1.0,
+            },
+            data.player.pos.y,
+        );
+        if data.player_attack_counter < 0.0 {
+            data.player_attack.health = 0;
+        }
+    } else {
+        if direction.x > 0.0 {
+            data.player.facing_direction = FacingDirection::Right;
+        } else if direction.x < 0.0 {
+            data.player.facing_direction = FacingDirection::Left;
+        }
 
-            if !input.keyboard[KBKey::Ctrl].is_down() {
-                const CAMERA_SPEED: f32 = 10.0;
-                match (input.keyboard[KBKey::A].is_down(), input.keyboard[KBKey::D].is_down()) {
-                    (false, true ) => data.camera_pos.x += CAMERA_SPEED * dt,
-                    (true , false) => data.camera_pos.x -= CAMERA_SPEED * dt,
-                    _ => (),
-                }
-                match (input.keyboard[KBKey::S].is_down(), input.keyboard[KBKey::W].is_down()) {
-                    (false, true ) => data.camera_pos.y += CAMERA_SPEED * dt,
-                    (true , false) => data.camera_pos.y -= CAMERA_SPEED * dt,
-                    _ => (),
-                }
-            }
+        if input.keyboard[KBKey::J].pressed() {
+            data.player_attack_counter = 0.1;
 
-            if input.mouse[MouseKey::LB].is_down() {
-                let tile_pos = screen_pos_to_tilemap_pos(
-                    input.mouse.pos(),
-                    data.camera_pos,
-                    (screen.width, screen.height),
-                );
-                data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Ground);
-            }
-            else if input.mouse[MouseKey::RB].is_down() {
-                let tile_pos = screen_pos_to_tilemap_pos(
-                    input.mouse.pos(),
-                    data.camera_pos,
-                    (screen.width, screen.height),
-                );
-                data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Empty);
-            }
+            data.player_attack.health = 1;
+            data.player_attack.pos = v2!(
+                data.player.pos.x + match data.player.facing_direction {
+                    FacingDirection::Right => 1.0,
+                    FacingDirection::Left => -1.0,
+                },
+                data.player.pos.y
+            );
+            data.player_attack.facing_direction = data.player.facing_direction;
+        } 
+    }
+    entity_move(&mut data.player, &data.tilemap, direction, dt);
 
-            render::clear(screen, Color::BLACK);
-            data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
+    for enemy in &mut data.enemies {
+        let mut direction = v2!(0.0, 0.0);
+        if distance_sq(enemy.pos, data.player.pos) >= 4.0 {
+            direction.x = if enemy.pos.x < data.player.pos.x { 1.0 } else { -1.0 };
+            direction.y = if enemy.pos.y < data.player.pos.y { 1.0 } else {  0.0 };
+        }
+        if direction.x > 0.0 {
+            enemy.facing_direction = FacingDirection::Right;
+        } else if direction.x < 0.0 {
+            enemy.facing_direction = FacingDirection::Left;
+        }
+        entity_move(enemy, &data.tilemap, direction, input.dt);
+    }
 
-            let thickness = 4;
-            render::fill_rect(screen, 0, 0, thickness, screen.height, Color::YELLOW);
-            render::fill_rect(screen, screen.width - thickness, 0, screen.width, screen.height, Color::YELLOW);
-            render::fill_rect(screen, 0, 0, screen.width, thickness, Color::YELLOW);
-            render::fill_rect(screen, 0, screen.height - thickness, screen.width, screen.height, Color::YELLOW);
+    let screen_center = v2!(
+        SCREEN_WIDTH_IN_TILES as f32 / 2.0,
+        SCREEN_HEIGHT_IN_TILES as f32 / 2.0,
+    );
+    data.camera_pos = data.player.pos - screen_center;
+    clamp(
+        &mut data.camera_pos.x,
+        0.0,
+        data.tilemap.width as f32 - SCREEN_WIDTH_IN_TILES,
+    );
+    clamp(
+        &mut data.camera_pos.y,
+        0.0,
+        data.tilemap.height as f32 - SCREEN_HEIGHT_IN_TILES,
+    );
+
+    render::clear(screen, Color::BLACK);
+    data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
+
+    let bmp = match data.player.facing_direction {
+        FacingDirection::Right => &data.player_bmps.right,
+        FacingDirection::Left => &data.player_bmps.left,
+    };
+    data.player.draw(screen, bmp, data.camera_pos);
+    if data.player_attack.health > 0 {
+        let bmp = match data.player_attack.facing_direction {
+            FacingDirection::Right => &data.player_bmps.attack_right,
+            FacingDirection::Left => &data.player_bmps.attack_left,
+        };
+        data.player_attack.draw(screen, bmp, data.camera_pos);
+    }
+
+    for enemy in &data.enemies {
+        let bmp = match enemy.facing_direction {
+            FacingDirection::Right => &data.enemy_bmp_right,
+            FacingDirection::Left => &data.enemy_bmp_left,
+        };
+        enemy.draw(screen, bmp, data.camera_pos);
+    }
+
+    format!("")
+}
+
+#[allow(clippy::useless_format)]
+fn level_editor(
+    screen: &mut Bitmap,
+    input:  &Input,
+    data:   &mut GameData,
+    dt:     f32,
+) -> String {
+    if input.keyboard[KBKey::K].pressed()
+    && input.keyboard[KBKey::Ctrl].is_down()
+    {
+        data.state = GameState::Playing;
+    }
+
+    if input.keyboard[KBKey::S].pressed()
+    && input.keyboard[KBKey::Ctrl].is_down()
+    {
+        file::File::write("data/levels/map_00", &data.tilemap).unwrap();
+    }
+
+    if !input.keyboard[KBKey::Ctrl].is_down() {
+        const CAMERA_SPEED: f32 = 10.0;
+        match (input.keyboard[KBKey::A].is_down(), input.keyboard[KBKey::D].is_down()) {
+            (false, true ) => data.camera_pos.x += CAMERA_SPEED * dt,
+            (true , false) => data.camera_pos.x -= CAMERA_SPEED * dt,
+            _ => (),
+        }
+        match (input.keyboard[KBKey::S].is_down(), input.keyboard[KBKey::W].is_down()) {
+            (false, true ) => data.camera_pos.y += CAMERA_SPEED * dt,
+            (true , false) => data.camera_pos.y -= CAMERA_SPEED * dt,
+            _ => (),
         }
     }
+
+    if input.mouse[MouseKey::LB].is_down() {
+        let tile_pos = screen_pos_to_tilemap_pos(
+            input.mouse.pos(),
+            data.camera_pos,
+            (screen.width, screen.height),
+        );
+        data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Ground);
+    }
+    else if input.mouse[MouseKey::RB].is_down() {
+        let tile_pos = screen_pos_to_tilemap_pos(
+            input.mouse.pos(),
+            data.camera_pos,
+            (screen.width, screen.height),
+        );
+        data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Empty);
+    }
+
+    render::clear(screen, Color::BLACK);
+    data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
+
+    let thickness = 4;
+    render::fill_rect(screen, 0, 0, thickness, screen.height, Color::YELLOW);
+    render::fill_rect(screen, screen.width - thickness, 0, screen.width, screen.height, Color::YELLOW);
+    render::fill_rect(screen, 0, 0, screen.width, thickness, Color::YELLOW);
+    render::fill_rect(screen, 0, screen.height - thickness, screen.width, screen.height, Color::YELLOW);
+
     format!("")
 }
 

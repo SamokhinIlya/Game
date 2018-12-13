@@ -3,7 +3,14 @@ use core::{
     ptr,
     convert::From,
 };
-use crate::{memory, file};
+use crate::{
+    memory,
+    file,
+    file::{
+        File,
+        Load,
+    },
+};
 
 pub struct Bitmap {
     pub data: *mut u32,
@@ -13,21 +20,21 @@ pub struct Bitmap {
 
 impl Bitmap {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
-        let bmp_memory =
-            unsafe { memory::allocate_bytes(width as usize * height as usize * size_of::<u32>()) };
+        assert!(width > 0 && height > 0);
 
-        Self {
-            data: bmp_memory as *mut u32,
-            width,
-            height,
-        }
+        #[allow(clippy::cast_ptr_alignment)]
+        let data = unsafe {
+            memory::allocate_bytes(width as usize * height as usize * size_of::<u32>())
+                as *mut u32
+        };
+        Self { data, width, height }
     }
 
     #[inline]
     pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
 }
 
-impl file::Load for Bitmap {
+impl Load for Bitmap {
     fn load(filepath: &str) -> Result<Self, file::LoadErr> {
         match file::File::read(filepath) {
             Ok(file) => Ok(Bitmap::from(file)),
@@ -37,37 +44,37 @@ impl file::Load for Bitmap {
 }
 
 //TODO: remove all hardcoding
-impl From<file::File> for Bitmap {
-    #[allow(non_snake_case)]
-    fn from(file: file::File) -> Self {
+impl From<File> for Bitmap {
+    #[allow(non_snake_case, clippy::cast_ptr_alignment)]
+    fn from(file: File) -> Self {
         #[repr(C, packed)]
         #[derive(Copy, Clone, Debug)]
         struct BITMAPFILEHEADER {
-            pub bfType: u16,
-            pub bfSize: u32,
-            pub bfReserved1: u16,
-            pub bfReserved2: u16,
-            pub bfOffBits: u32,
+            bfType: u16,
+            bfSize: u32,
+            bfReserved1: u16,
+            bfReserved2: u16,
+            bfOffBits: u32,
         }
 
         #[repr(C, packed)]
         #[derive(Copy, Clone, Debug)]
         struct BITMAPV5HEADER {
-            pub bV5Size: u32,
-            pub bV5Width: i32,
-            pub bV5Height: i32,
-            pub bV5Planes: u16,
-            pub bV5BitCount: u16,
-            pub bV5Compression: u32,
-            pub bV5SizeImage: u32,
-            pub bV5XPelsPerMeter: i32,
-            pub bV5YPelsPerMeter: i32,
-            pub bV5ClrUsed: u32,
-            pub bV5ClrImportant: u32,
-            pub bV5RedMask: u32,
-            pub bV5GreenMask: u32,
-            pub bV5BlueMask: u32,
-            pub bV5AlphaMask: u32,
+            bV5Size: u32,
+            bV5Width: i32,
+            bV5Height: i32,
+            bV5Planes: u16,
+            bV5BitCount: u16,
+            bV5Compression: u32,
+            bV5SizeImage: u32,
+            bV5XPelsPerMeter: i32,
+            bV5YPelsPerMeter: i32,
+            bV5ClrUsed: u32,
+            bV5ClrImportant: u32,
+            bV5RedMask: u32,
+            bV5GreenMask: u32,
+            bV5BlueMask: u32,
+            bV5AlphaMask: u32,
             /*
             bV5CSType: u32       ,
             bV5Endpoints: CIEXYZTRIPLE,
@@ -84,8 +91,8 @@ impl From<file::File> for Bitmap {
         #[repr(C, packed)]
         #[derive(Copy, Clone, Debug)]
         struct BitmapHeader {
-            pub BITMAPFILEHEADER: BITMAPFILEHEADER,
-            pub BITMAPV5HEADER: BITMAPV5HEADER,
+            BITMAPFILEHEADER: BITMAPFILEHEADER,
+            BITMAPV5HEADER: BITMAPV5HEADER,
         };
 
         let header = unsafe { ptr::read(file.data as *mut BitmapHeader) };
