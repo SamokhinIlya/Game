@@ -8,8 +8,21 @@
             "command": "cargo",
             "args": [
                 "run",
-                "--release",
+                "--release"
             ],
+            "problemMatcher": "$rustc",
+        },
+        {
+            "label": "cargo clippy",
+            "command": "cargo",
+            "args": [
+                "clippy",
+            ],
+            "problemMatcher": "$rustc",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }
     ]
 }
