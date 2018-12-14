@@ -1,37 +1,40 @@
+use core::{
+    default::Default,
+    ops::{Index, IndexMut},
+};
+
+#[derive(Default)]
 pub struct Input {
     pub keyboard: KeyboardState,
     pub mouse: MouseState,
     pub dt: f32,
 }
 
-impl Input {
-    pub fn new() -> Self {
-        Self {
-            keyboard: KeyboardState::new(),
-            mouse: MouseState::new(),
-            dt: 0.0,
-        }
-    }
-}
-
 pub struct KeyboardState {
     keys: [DigitalKey; 0xFF],
 }
 
-impl core::ops::Index<KBKey> for KeyboardState {
+impl Default for KeyboardState {
+    fn default() -> Self {
+        Self { keys: [Default::default(); 0xFF] }
+    }
+}
+
+impl Index<KBKey> for KeyboardState {
     type Output = DigitalKey;
     fn index(&self, key: KBKey) -> &Self::Output {
         &self.keys[key as usize]
     }
 }
 
-impl core::ops::IndexMut<KBKey> for KeyboardState {
+impl IndexMut<KBKey> for KeyboardState {
     fn index_mut(&mut self, key: KBKey) -> &mut DigitalKey {
         &mut self.keys[key as usize]
     }
 }
 
 //TODO: scroll wheel
+#[derive(Default)]
 pub struct MouseState {
     pub x: i32,
     pub y: i32,
@@ -50,20 +53,20 @@ pub enum MouseKey {
     MB = 2,
 }
 
-impl core::ops::Index<MouseKey> for MouseState {
+impl Index<MouseKey> for MouseState {
     type Output = DigitalKey;
     fn index(&self, key: MouseKey) -> &Self::Output {
         &self.keys[key as usize]
     }
 }
 
-impl core::ops::IndexMut<MouseKey> for MouseState {
+impl IndexMut<MouseKey> for MouseState {
     fn index_mut(&mut self, key: MouseKey) -> &mut DigitalKey {
         &mut self.keys[key as usize]
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct DigitalKey {
     curr: bool,
     prev: bool,
@@ -72,7 +75,7 @@ pub struct DigitalKey {
 #[allow(dead_code)]
 impl DigitalKey {
     #[inline]
-    fn new(curr: bool, prev: bool) -> Self {
+    fn from_bools(curr: bool, prev: bool) -> Self {
         Self { curr, prev }
     }
 
@@ -226,24 +229,6 @@ pub enum KBKey {
     Backslash = 0xDC,
     RBracket = 0xDD,
     Quote = 0xDE,
-}
-
-impl KeyboardState {
-    fn new() -> Self {
-        Self {
-            keys: [DigitalKey::new(false, false); 0xFF],
-        }
-    }
-}
-
-impl MouseState {
-    fn new() -> Self {
-        Self {
-            x: 0,
-            y: 0,
-            keys: [DigitalKey::new(false, false); 3],
-        }
-    }
 }
 
 impl KBKey {

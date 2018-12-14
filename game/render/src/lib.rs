@@ -70,18 +70,18 @@ pub fn draw_bmp(
 
             let sr: i32 = ((src_color & Color::R_MASK) >> 16) as i32;
             let sg: i32 = ((src_color & Color::G_MASK) >> 8) as i32;
-            let sb: i32 = ((src_color & Color::B_MASK) >> 0) as i32;
+            let sb: i32 = (src_color & Color::B_MASK) as i32;
 
             let dr: i32 = ((dst_color & Color::R_MASK) >> 16) as i32;
             let dg: i32 = ((dst_color & Color::G_MASK) >> 8) as i32;
-            let db: i32 = ((dst_color & Color::B_MASK) >> 0) as i32;
+            let db: i32 = (dst_color & Color::B_MASK) as i32;
 
             //XXX: r = dr + (sr - dr) * acoeff
             let r: u32 = (dr + ((sr - dr) as f32 * acoeff) as i32) as u32;
             let g: u32 = (dg + ((sg - dg) as f32 * acoeff) as i32) as u32;
             let b: u32 = (db + ((sb - db) as f32 * acoeff) as i32) as u32;
 
-            let color: u32 = (r << 16) | (g << 8) | (b << 0);
+            let color: u32 = (r << 16) | (g << 8) | b;
 
             unsafe {
                 *dst = color;
@@ -115,7 +115,7 @@ impl Color {
         let data = 0xFF00_0000
             | ((r * 255.0).round() as u32) << 16
             | ((g * 255.0).round() as u32) << 8
-            | ((b * 255.0).round() as u32) << 0;
+            | (b * 255.0).round() as u32;
 
         Self { data }
     }

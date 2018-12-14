@@ -155,14 +155,6 @@ fn playing(
         }
 
         data.player_attack_counter -= dt;
-        //FIXME: try jump and attack
-        data.player_attack.pos = v2!(
-            data.player.pos.x + match data.player.facing_direction {
-                FacingDirection::Right => 1.0,
-                FacingDirection::Left => -1.0,
-            },
-            data.player.pos.y,
-        );
         if data.player_attack_counter < 0.0 {
             data.player_attack.health = 0;
         }
@@ -177,17 +169,17 @@ fn playing(
             data.player_attack_counter = 0.1;
 
             data.player_attack.health = 1;
-            data.player_attack.pos = v2!(
-                data.player.pos.x + match data.player.facing_direction {
-                    FacingDirection::Right => 1.0,
-                    FacingDirection::Left => -1.0,
-                },
-                data.player.pos.y
-            );
             data.player_attack.facing_direction = data.player.facing_direction;
         } 
     }
     entity_move(&mut data.player, &data.tilemap, direction, dt);
+    data.player_attack.pos = v2!(
+        data.player.pos.x + match data.player.facing_direction {
+            FacingDirection::Right => 1.0,
+            FacingDirection::Left => -1.0,
+        },
+        data.player.pos.y,
+    );
 
     for enemy in &mut data.enemies {
         let mut direction = v2!(0.0, 0.0);

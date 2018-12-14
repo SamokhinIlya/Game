@@ -1,4 +1,9 @@
-use core::{mem, mem::size_of, ptr};
+use core::{
+    mem,
+    mem::size_of,
+    ptr,
+    ops::Drop,
+};
 use winapi::{
     ctypes::*,
     shared::{minwindef::*, windef::*},
@@ -21,7 +26,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn create(width: i32, height: i32) -> Self {
+    pub fn with_dimensions(width: i32, height: i32) -> Self {
         use winapi::um::libloaderapi::GetModuleHandleA;
 
         let instance = unsafe { GetModuleHandleA(ptr::null()) };
@@ -132,19 +137,13 @@ impl Window {
     }
 
     #[inline]
-    pub fn width(&self) -> i32 {
-        self.width
-    }
+    pub fn width(&self) -> i32 { self.width }
 
     #[inline]
-    pub fn height(&self) -> i32 {
-        self.height
-    }
+    pub fn height(&self) -> i32 { self.height }
 
     #[inline]
-    pub fn handle(&self) -> HWND {
-        self.handle
-    }
+    pub fn handle(&self) -> HWND { self.handle }
 
     pub fn toggle_fullscreen(&mut self) {
         let current_style = unsafe { GetWindowLongA(self.handle, GWL_STYLE) };
@@ -269,7 +268,7 @@ impl Window {
     }
 }
 
-impl core::ops::Drop for Window {
+impl Drop for Window {
     fn drop(&mut self) {
         if unsafe { DestroyWindow(self.handle) } == 0 {
             debug::panic_with_last_error_message("DestroyWindow");
