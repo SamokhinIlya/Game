@@ -167,7 +167,6 @@ fn playing(
 
         if input.keyboard[KBKey::J].pressed() {
             data.player_attack_counter = 0.1;
-
             data.player_attack.health = 1;
             data.player_attack.facing_direction = data.player.facing_direction;
         } 
@@ -407,10 +406,10 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
     entity.pos.x += dx;
 
     if entity.on_the_ground && direction.y > 0.0 {
-        entity.vel.y = 10.0;
+        entity.vel.y = 40.0;
         entity.on_the_ground = false;
     } else {
-        const GRAVITY: f32 = -40.0;
+        const GRAVITY: f32 = -80.0;
         entity.vel.y += 0.5 * GRAVITY * dt;
     }
     clamp(&mut entity.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
