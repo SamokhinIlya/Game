@@ -34,7 +34,7 @@ pub fn fill_rect(
 
 //FIXME: artifacts at the top-left edges of the screen,
 //       when drawn bmp intersects them
-pub fn draw_bmp(
+pub fn draw_bmp_ptr(
     dst_bmp: &Bitmap,
     src_bmp: &Bitmap,
     mut dst_x0: i32,
@@ -92,6 +92,53 @@ pub fn draw_bmp(
         unsafe {
             src_row = src_row.add(src_width);
             dst_row = dst_row.add(dst_width);
+        }
+    }
+}
+
+//FIXME: artifacts at the top-left edges of the screen,
+//       when drawn bmp intersects them
+pub fn draw_bmp(
+    dst_bmp: &Bitmap,
+    src_bmp: &Bitmap,
+    x: i32,
+    y: i32,
+) {
+    let src0 = (if x < 0 { -x } else { 0 }, if y < 0 { -y } else { 0 });
+    let src1 = (src_bmp.width, src_bmp.height);
+
+    let mut dst0 = (x, y);
+    let mut dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);
+
+    clamp(&mut dst0.0, 0, dst_bmp.width);
+    clamp(&mut dst0.1, 0, dst_bmp.height);
+    clamp(&mut dst1.0, 0, dst_bmp.width);
+    clamp(&mut dst1.1, 0, dst_bmp.height);
+
+    for (dst_row, src_row) in dst_bmp.view(dst0, dst1).zip(src_bmp.view(src0, src1)) {
+        for (dst, src) in dst_row.iter_mut().zip(src_row.iter_mut()) {
+            //FIXME: slow!
+            let src_color = *src;
+            let dst_color = *dst;
+
+            let acoeff: f32 = (src_color >> 24) as f32 / 255.0;
+
+            let sr: i32 = ((src_color & Color::R_MASK) >> 16) as i32;
+            let sg: i32 = ((src_color & Color::G_MASK) >> 8) as i32;
+            let sb: i32 = (src_color & Color::B_MASK) as i32;
+
+            let dr: i32 = ((dst_color & Color::R_MASK) >> 16) as i32;
+            let dg: i32 = ((dst_color & Color::G_MASK) >> 8) as i32;
+            let db: i32 = (dst_color & Color::B_MASK) as i32;
+
+            //XXX: r = dr + (sr - dr) * acoeff
+            let r: u32 = (dr + ((sr - dr) as f32 * acoeff) as i32) as u32;
+            let g: u32 = (dg + ((sg - dg) as f32 * acoeff) as i32) as u32;
+            let b: u32 = (db + ((sb - db) as f32 * acoeff) as i32) as u32;
+
+            let color: u32 = (r << 16) | (g << 8) | b;
+
+            *dst = color;
         }
     }
 }

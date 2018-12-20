@@ -1,4 +1,7 @@
-use core::mem::size_of;
+use core::{
+    mem::size_of,
+    marker::Sized,
+};
 use winapi::ctypes::*;
 use crate::debug;
 
@@ -6,8 +9,7 @@ use winapi::{um::heapapi::*, um::winnt::*};
 
 #[inline]
 pub unsafe fn allocate<T>(value: T) -> *mut T
-where
-    T: core::marker::Sized,
+    where T: Sized,
 {
     let memory = allocate_bytes(size_of::<T>()) as *mut T;
     *memory = value;
@@ -35,8 +37,7 @@ pub unsafe fn allocate_bytes(nbytes: usize) -> *mut u8 {
 }
 
 pub unsafe fn deallocate<T>(ptr: *mut T)
-where
-    T: core::marker::Sized,
+    where T: Sized,
 {
     let heap = GetProcessHeap();
     if heap.is_null() {

@@ -2,6 +2,10 @@ use core::{
     mem::size_of,
     ptr,
     convert::From,
+    ops::{Index, IndexMut, Drop},
+    iter::Iterator,
+    marker::PhantomData,
+    slice,
 };
 use crate::{
     memory,
@@ -18,6 +22,14 @@ pub struct Bitmap {
     pub height: i32,
 }
 
+impl Drop for Bitmap {
+    fn drop(&mut self) {
+        unsafe {
+            memory::deallocate(self.data);
+        }
+    }
+}
+
 impl Bitmap {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         assert!(width > 0 && height > 0);
@@ -32,6 +44,67 @@ impl Bitmap {
 
     #[inline]
     pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
+
+    pub fn view(&self, top_left: (i32, i32), bottom_right: (i32, i32)) -> BitmapView {
+        // TODO: add clamping to boundaries
+        let pitch = self.width as usize;
+        let ptr = unsafe {
+            self.data.add(top_left.1 as usize * pitch + top_left.0 as usize)
+        };
+        let height = bottom_right.1 as usize - top_left.0 as usize;
+        BitmapView {
+            ptr,
+            max_ptr: unsafe { ptr.add(height * pitch) },
+            pitch,
+            width: bottom_right.0 as usize - top_left.0 as usize,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+type Rect = ((usize, usize), (usize, usize));
+
+pub struct BitmapView<'a> {
+    ptr: *mut u32,
+    max_ptr: *mut u32,
+    pitch: usize,
+    width: usize,
+    _phantom: PhantomData<&'a u32>,
+}
+
+impl<'a> Iterator for BitmapView<'a> {
+    type Item = &'a mut [u32];
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.ptr < self.max_ptr {
+            unsafe {
+                let slice = slice::from_raw_parts_mut(self.ptr, self.width);
+                self.ptr = self.ptr.add(self.pitch);
+                Some(slice)
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl Index<usize> for Bitmap {
+    type Output = [u32];
+
+    fn index(&self, i: usize) -> &Self::Output {
+        assert!(i < self.height as usize, "Bitmap height: {}, index: {}", self.height, i);
+        unsafe {
+            core::slice::from_raw_parts(self.data.add(i), self.width as usize)
+        }
+    }
+}
+
+impl IndexMut<usize> for Bitmap {
+    fn index_mut(&mut self, i: usize) -> &mut [u32] {
+        assert!(i < self.height as usize, "Bitmap height: {}, index: {}", self.height, i);
+        unsafe {
+            core::slice::from_raw_parts_mut(self.data.add(i), self.width as usize)
+        }
+    }
 }
 
 impl Load for Bitmap {
