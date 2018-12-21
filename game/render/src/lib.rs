@@ -32,6 +32,21 @@ pub fn fill_rect(
     }
 }
 
+pub fn draw_bmp(
+    dst_bmp: &Bitmap,
+    src_bmp: &Bitmap,
+    dst_x0: i32,
+    dst_y0: i32,
+) {
+    //draw_bmp_ptr(
+    draw_bmp_iter(
+        dst_bmp,
+        src_bmp,
+        dst_x0,
+        dst_y0,
+    );
+}
+
 //FIXME: artifacts at the top-left edges of the screen,
 //       when drawn bmp intersects them
 pub fn draw_bmp_ptr(
@@ -98,7 +113,7 @@ pub fn draw_bmp_ptr(
 
 //FIXME: artifacts at the top-left edges of the screen,
 //       when drawn bmp intersects them
-pub fn draw_bmp(
+pub fn draw_bmp_iter(
     dst_bmp: &Bitmap,
     src_bmp: &Bitmap,
     x: i32,
@@ -115,7 +130,10 @@ pub fn draw_bmp(
     clamp(&mut dst1.0, 0, dst_bmp.width);
     clamp(&mut dst1.1, 0, dst_bmp.height);
 
-    for (dst_row, src_row) in dst_bmp.view(dst0, dst1).zip(src_bmp.view(src0, src1)) {
+    let dst_view = dst_bmp.view(dst0, dst1);
+    let src_view = src_bmp.view(src0, src1);
+
+    for (dst_row, src_row) in dst_view.zip(src_view) {
         for (dst, src) in dst_row.iter_mut().zip(src_row.iter_mut()) {
             //FIXME: slow!
             let src_color = *src;

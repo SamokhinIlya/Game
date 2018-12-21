@@ -46,23 +46,20 @@ impl Bitmap {
     pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
 
     pub fn view(&self, top_left: (i32, i32), bottom_right: (i32, i32)) -> BitmapView {
-        // TODO: add clamping to boundaries
         let pitch = self.width as usize;
         let ptr = unsafe {
             self.data.add(top_left.1 as usize * pitch + top_left.0 as usize)
         };
-        let height = bottom_right.1 as usize - top_left.0 as usize;
+        let height = (bottom_right.1 - top_left.1) as usize;
         BitmapView {
             ptr,
             max_ptr: unsafe { ptr.add(height * pitch) },
             pitch,
-            width: bottom_right.0 as usize - top_left.0 as usize,
+            width: (bottom_right.0 - top_left.0) as usize,
             _phantom: PhantomData,
         }
     }
 }
-
-type Rect = ((usize, usize), (usize, usize));
 
 pub struct BitmapView<'a> {
     ptr: *mut u32,
