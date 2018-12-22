@@ -25,6 +25,7 @@ fn main() {
         use platform::input::KBKey;
         running = process_messages();
         {
+            use platform::input::MouseKey;
             if window.is_active() {
                 went_inactive = false;
                 for &key in input::KBKey::variants() {
@@ -32,25 +33,27 @@ fn main() {
                     let is_down = key_state < 0;
                     input.keyboard[key].update(is_down);
                 }
+                let mut mouse_point = unsafe { mem::uninitialized() };
+                if unsafe { GetCursorPos(&mut mouse_point) } == 0 {
+                    debug::panic_with_last_error_message("GetCursorPos");
+                }
+                if unsafe { ScreenToClient(window.handle(), &mut mouse_point) } == 0 {
+                    debug::panic_with_last_error_message("ScreenToClient");
+                }
+                input.mouse.x = mouse_point.x;
+                input.mouse.y = mouse_point.y;
+                input.mouse[MouseKey::LB].update(unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0);
+                input.mouse[MouseKey::RB].update(unsafe { GetAsyncKeyState(VK_RBUTTON) } < 0);
+                input.mouse[MouseKey::MB].update(unsafe { GetAsyncKeyState(VK_MBUTTON) } < 0);
             } else if !went_inactive {
                 went_inactive = true;
                 for &key in input::KBKey::variants() {
                     input.keyboard[key].update(false);
                 }
+                input.mouse[MouseKey::LB].update(false);
+                input.mouse[MouseKey::RB].update(false);
+                input.mouse[MouseKey::MB].update(false);
             }
-            use platform::input::MouseKey;
-            let mut mouse_point = unsafe { mem::uninitialized() };
-            if unsafe { GetCursorPos(&mut mouse_point) } == 0 {
-                debug::panic_with_last_error_message("GetCursorPos");
-            }
-            if unsafe { ScreenToClient(window.handle(), &mut mouse_point) } == 0 {
-                debug::panic_with_last_error_message("ScreenToClient");
-            }
-            input.mouse.x = mouse_point.x;
-            input.mouse.y = mouse_point.y;
-            input.mouse[MouseKey::LB].update(unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0);
-            input.mouse[MouseKey::RB].update(unsafe { GetAsyncKeyState(VK_RBUTTON) } < 0);
-            input.mouse[MouseKey::MB].update(unsafe { GetAsyncKeyState(VK_MBUTTON) } < 0);
         }
 
         if (input.keyboard[KBKey::Alt].is_down() && input.keyboard[KBKey::Enter].pressed())

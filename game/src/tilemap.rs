@@ -7,18 +7,20 @@ use crate::vector::V2;
 
 pub const TILE_SIZE: i32 = 64;
 //FIXME: these should be derived from TILE_SIZE and screen_size
-pub const H_DRAW_TILES: i32 = 16;
-pub const V_DRAW_TILES: i32 = 11;
+pub const H_DRAW_TILES: i32 = 15;
+pub const V_DRAW_TILES: i32 = 9;
 pub const SCREEN_WIDTH_IN_TILES: f32 = 15.0;
-pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.45; //FIXME: not quite
+pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.4375;
 
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: (i32, i32),
     camera: V2,
     screen: (i32, i32),
 ) -> V2 {
-    v2!(screen_pos.0 as f32 / TILE_SIZE as f32 + camera.x,
-        (screen.1 - screen_pos.1) as f32 / TILE_SIZE as f32 + camera.y)
+    v2!(
+        screen_pos.0 as f32 / TILE_SIZE as f32 + camera.x,
+        (screen.1 - screen_pos.1) as f32 / TILE_SIZE as f32 + camera.y
+    )
 }
 
 pub fn tilemap_pos_to_screen_pos(
@@ -56,10 +58,10 @@ impl Tile {
     }
 }
 
+//TODO: variable size
 const TILEMAP_WIDTH: usize = 16 * 2;
 const TILEMAP_HEIGHT: usize = 9 * 2;
 
-//TODO: variable size
 #[derive(Clone)]
 pub struct Tilemap {
     pub width: i32,
@@ -83,8 +85,9 @@ impl Tilemap {
     }
 
     pub fn get(&self, x: i32, y: i32) -> Option<Tile> {
-        if x >= 0 && x < self.width
-        && y >= 0 && y < self.height {
+        if     x >= 0 && x < self.width
+            && y >= 0 && y < self.height
+        {
             Some(self.map[y as usize][x as usize])
         } else {
             None
@@ -97,10 +100,13 @@ impl Tilemap {
         self.map[y as usize][x as usize] = tile;
     }
 
-    pub fn set(&mut self, x: i32, y: i32, tile: Tile) {
+    pub fn set(&mut self, x: i32, y: i32, tile: Tile) -> Result<(), ()> {
         if x >= 0 && x < self.width
         && y >= 0 && y < self.height {
             self.map[y as usize][x as usize] = tile;
+            Ok(())
+        } else {
+            Err(())
         }
     }
 
@@ -110,12 +116,12 @@ impl Tilemap {
         tile_bitmaps: &[Bitmap],
         camera: V2,
     ) {
-        for y in 0..V_DRAW_TILES {
+        for y in 0..=V_DRAW_TILES {
             let tile_y = camera.y.trunc() as i32 + y;
             if tile_y < 0 { continue }
             if tile_y >= self.height { break }
 
-            for x in 0..H_DRAW_TILES {
+            for x in 0..=H_DRAW_TILES {
                 let tile_x = camera.x.trunc() as i32 + x;
                 if tile_x < 0 { continue }
                 if tile_x >= self.width { break }
@@ -131,7 +137,7 @@ impl Tilemap {
                     camera,
                     (dst_bmp.width, dst_bmp.height)
                 );
-                render::draw_bmp(dst_bmp, tile_bmp, x0, y0 - TILE_SIZE);
+                render::draw_bmp(dst_bmp, tile_bmp, (x0, y0 - TILE_SIZE));
             }
         }
     }

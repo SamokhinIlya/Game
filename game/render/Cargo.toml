@@ -5,5 +5,5 @@ authors = ["SamokhinIlya <samokhin.ilya.97@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-utils = { path = "../utils" }
+utils = { path = "../../utils" }
 platform = { path = "../../platform" }

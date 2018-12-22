@@ -17,3 +17,5 @@ features = [
     "profileapi",
     "handleapi",
 ]
+[dependencies.utils]
+path = "../utils"

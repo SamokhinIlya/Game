@@ -276,7 +276,7 @@ fn level_editor(
             data.camera_pos,
             (screen.width, screen.height),
         );
-        data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Ground);
+        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Ground);
     }
     else if input.mouse[MouseKey::RB].is_down() {
         let tile_pos = screen_pos_to_tilemap_pos(
@@ -284,19 +284,20 @@ fn level_editor(
             data.camera_pos,
             (screen.width, screen.height),
         );
-        data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Empty);
+        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Empty);
     }
 
     render::clear(screen, Color::BLACK);
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
 
+    // draw yellow outline
     let thickness = 4;
-    render::fill_rect(screen, 0, 0, thickness, screen.height, Color::YELLOW);
-    render::fill_rect(screen, screen.width - thickness, 0, screen.width, screen.height, Color::YELLOW);
-    render::fill_rect(screen, 0, 0, screen.width, thickness, Color::YELLOW);
-    render::fill_rect(screen, 0, screen.height - thickness, screen.width, screen.height, Color::YELLOW);
+    render::fill_rect(screen, (0, 0), (thickness, screen.height), Color::YELLOW);
+    render::fill_rect(screen, (screen.width - thickness, 0), screen.dim(), Color::YELLOW);
+    render::fill_rect(screen, (0, 0), (screen.width, thickness), Color::YELLOW);
+    render::fill_rect(screen, (0, screen.height - thickness), screen.dim(), Color::YELLOW);
 
-    format!("")
+    format!("{:?}", screen.dim())
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -364,7 +365,7 @@ impl Entity {
             return
         }
         let (x0, y0) = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
-        render::draw_bmp(screen, bmp, x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2);
+        render::draw_bmp(screen, bmp, (x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2));
     }
 }
 

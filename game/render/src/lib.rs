@@ -4,135 +4,23 @@ extern crate platform;
 use utils::clamp;
 use platform::graphics::Bitmap;
 
-pub fn fill_rect(
-    dst_bmp: &Bitmap,
-    mut x0: i32,
-    mut y0: i32,
-    mut x1: i32,
-    mut y1: i32,
-    color: Color,
-) {
-    clamp(&mut x0, 0, dst_bmp.width);
-    clamp(&mut y0, 0, dst_bmp.height);
-    clamp(&mut x1, 0, dst_bmp.width);
-    clamp(&mut y1, 0, dst_bmp.height);
-
-    let u32_color = color.as_u32();
-
-    let mut row: *mut u32 = unsafe { dst_bmp.data.add((y0 * dst_bmp.width) as usize) };
-    for _y in y0..y1 {
-        let mut pixel = unsafe { row.add(x0 as usize) };
-        for _x in x0..x1 {
-            unsafe {
-                *pixel = u32_color;
-                pixel = pixel.add(1);
-            }
-        }
-        row = unsafe { row.add(dst_bmp.width as usize) };
-    }
-}
-
-pub fn draw_bmp(
-    dst_bmp: &Bitmap,
-    src_bmp: &Bitmap,
-    dst_x0: i32,
-    dst_y0: i32,
-) {
-    //draw_bmp_ptr(
-    draw_bmp_iter(
-        dst_bmp,
-        src_bmp,
-        dst_x0,
-        dst_y0,
-    );
-}
-
-//FIXME: artifacts at the top-left edges of the screen,
-//       when drawn bmp intersects them
-pub fn draw_bmp_ptr(
-    dst_bmp: &Bitmap,
-    src_bmp: &Bitmap,
-    mut dst_x0: i32,
-    mut dst_y0: i32,
-) {
-    let src_width = src_bmp.width as usize;
-    let dst_width = dst_bmp.width as usize;
-
-    let src_x0 = if dst_x0 < 0 { -dst_x0 } else { 0 };
-    let src_y0 = if dst_y0 < 0 { -dst_y0 } else { 0 };
-    let src_x1 = src_bmp.width;
-    let src_y1 = src_bmp.height;
-
-    let mut dst_x1 = dst_x0 + src_x1;
-    let mut dst_y1 = dst_y0 + src_y1;
-
-    clamp(&mut dst_x0, 0, dst_bmp.width);
-    clamp(&mut dst_y0, 0, dst_bmp.height);
-    clamp(&mut dst_x1, 0, dst_bmp.width);
-    clamp(&mut dst_y1, 0, dst_bmp.height);
-
-    let mut src_row = unsafe { src_bmp.data.add(src_y0 as usize * src_width) };
-    let mut dst_row = unsafe { dst_bmp.data.add(dst_y0 as usize * dst_width) };
-    for _y in dst_y0..dst_y1 {
-        let mut src = unsafe { src_row.add(src_x0 as usize) };
-        let mut dst = unsafe { dst_row.add(dst_x0 as usize) };
-        for _x in dst_x0..dst_x1 {
-            //FIXME: slow!
-            let src_color = unsafe { *src };
-            let dst_color = unsafe { *dst };
-
-            let acoeff: f32 = (src_color >> 24) as f32 / 255.0;
-
-            let sr: i32 = ((src_color & Color::R_MASK) >> 16) as i32;
-            let sg: i32 = ((src_color & Color::G_MASK) >> 8) as i32;
-            let sb: i32 = (src_color & Color::B_MASK) as i32;
-
-            let dr: i32 = ((dst_color & Color::R_MASK) >> 16) as i32;
-            let dg: i32 = ((dst_color & Color::G_MASK) >> 8) as i32;
-            let db: i32 = (dst_color & Color::B_MASK) as i32;
-
-            //XXX: r = dr + (sr - dr) * acoeff
-            let r: u32 = (dr + ((sr - dr) as f32 * acoeff) as i32) as u32;
-            let g: u32 = (dg + ((sg - dg) as f32 * acoeff) as i32) as u32;
-            let b: u32 = (db + ((sb - db) as f32 * acoeff) as i32) as u32;
-
-            let color: u32 = (r << 16) | (g << 8) | b;
-
-            unsafe {
-                *dst = color;
-                src = src.add(1);
-                dst = dst.add(1);
-            }
-        }
-        unsafe {
-            src_row = src_row.add(src_width);
-            dst_row = dst_row.add(dst_width);
+pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color) {
+    for row in dst_bmp.clamped_view(p0, p1) {
+        for pxl in row {
+            *pxl = color.as_u32();
         }
     }
 }
 
-//FIXME: artifacts at the top-left edges of the screen,
-//       when drawn bmp intersects them
-pub fn draw_bmp_iter(
-    dst_bmp: &Bitmap,
-    src_bmp: &Bitmap,
-    x: i32,
-    y: i32,
-) {
-    let src0 = (if x < 0 { -x } else { 0 }, if y < 0 { -y } else { 0 });
+pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
+    let src0 = (if p.0 < 0 { -p.0 } else { 0 }, if p.1 < 0 { -p.1 } else { 0 });
     let src1 = (src_bmp.width, src_bmp.height);
 
-    let mut dst0 = (x, y);
-    let mut dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);
+    let dst0 = p;
+    let dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);
 
-    clamp(&mut dst0.0, 0, dst_bmp.width);
-    clamp(&mut dst0.1, 0, dst_bmp.height);
-    clamp(&mut dst1.0, 0, dst_bmp.width);
-    clamp(&mut dst1.1, 0, dst_bmp.height);
-
-    let dst_view = dst_bmp.view(dst0, dst1);
-    let src_view = src_bmp.view(src0, src1);
-
+    let dst_view = dst_bmp.clamped_view(dst0, dst1);
+    let src_view = src_bmp.clamped_view(src0, src1);
     for (dst_row, src_row) in dst_view.zip(src_view) {
         for (dst, src) in dst_row.iter_mut().zip(src_row.iter_mut()) {
             //FIXME: slow!
@@ -163,7 +51,7 @@ pub fn draw_bmp_iter(
 
 #[inline]
 pub fn clear(dst_bmp: &Bitmap, color: Color) {
-    fill_rect(dst_bmp, 0, 0, dst_bmp.width, dst_bmp.height, color);
+    fill_rect(dst_bmp, (0, 0), dst_bmp.dim(), color);
 }
 
 #[derive(Copy, Clone)]
