@@ -130,12 +130,13 @@ impl Tilemap {
                 if !tile.is_visible() { continue }
 
                 let tile_bmp: &Bitmap = get_tile_bmp(tile_bitmaps, tile);
-                debug_assert!(tile_bmp.width == tile_bmp.height);
+                // TODO: this should be checked somewhere else (on initialization maybe)
+                debug_assert!(tile_bmp.width() == tile_bmp.height());
 
                 let (x0, y0) = tilemap_pos_to_screen_pos(
                     v2!(tile_x as f32, tile_y as f32),
                     camera,
-                    (dst_bmp.width, dst_bmp.height)
+                    (dst_bmp.width(), dst_bmp.height())
                 );
                 render::draw_bmp(dst_bmp, tile_bmp, (x0, y0 - TILE_SIZE));
             }

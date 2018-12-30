@@ -15,7 +15,7 @@ fn main() {
     let mut window = window::Window::with_dimensions(1920 / 2, 1080 / 2);
     let mut window_bmp = graphics::Bitmap::with_dimensions(window.width(), window.height());
     let mut input: input::Input = Default::default();
-    let game_data_ptr = game::startup(window_bmp.width, window_bmp.height);
+    let game_data_ptr = game::startup(window_bmp.width(), window_bmp.height());
    
     let mut running = true;
     let mut went_inactive = false;

@@ -4,7 +4,7 @@ use platform::{
     file::Load,
     graphics::Bitmap,
     input::{Input, KBKey, MouseKey},
-    memory, Opaque,
+    memory, RawPtr,
 };
 use render::Color;
 use utils::*;
@@ -28,10 +28,9 @@ use crate::tilemap::{
 };
 
 /* TODO:
-  - entity - entity collision
-
   - visuals:
     - dust cloud when changing direction
+    - generating vfx at runtime (particles)
 */
 
 enum GameState {
@@ -65,43 +64,37 @@ struct PlayerBmps {
     pub attack_left: Bitmap,
 }
 
-pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut Opaque {
-    let result = unsafe {
-        memory::allocate(GameData {
-            state: GameState::LevelEditor,
-            tilemap: match Tilemap::load("data/levels/map_00") {
-                Ok(t) => t,
-                Err(_) => Tilemap::new(),
-            },
-            camera_pos: v2!(0.0, 0.0),
-            player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
-            player_attack: Entity::with_pos_health(V2::new(), 0),
-            player_attacking: false,
-            player_attack_counter: 0.0,
-            enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 1); 1],
-            tile_bitmaps: [Bitmap::load("data/sprites/size_64/test_tile.bmp").unwrap(); 1],
-            player_bmps: PlayerBmps {
-                right: Bitmap::load("data/sprites/size_64/test_player_right.bmp").unwrap(),
-                left: Bitmap::load("data/sprites/size_64/test_player_left.bmp").unwrap(),
-                attack_right: Bitmap::load("data/sprites/size_64/test_player_attack_right.bmp").unwrap(),
-                attack_left: Bitmap::load("data/sprites/size_64/test_player_attack_left.bmp").unwrap(),
-            },
-            enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
-            enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
-        })
-    };
-    result as *mut Opaque
+pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
+    let result = unsafe { memory::allocate(GameData {
+        state: GameState::LevelEditor,
+        tilemap: Tilemap::load("data/levels/map_00").unwrap_or_else(|_| Tilemap::new()),
+        camera_pos: v2!(0.0, 0.0),
+        player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
+        player_attack: Entity::with_pos_health(V2::new(), 0),
+        player_attacking: false,
+        player_attack_counter: 0.0,
+        enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 1); 1],
+        tile_bitmaps: [Bitmap::load("data/sprites/size_64/test_tile.bmp").unwrap(); 1],
+        player_bmps: PlayerBmps {
+            right: Bitmap::load("data/sprites/size_64/test_player_right.bmp").unwrap(),
+            left: Bitmap::load("data/sprites/size_64/test_player_left.bmp").unwrap(),
+            attack_right: Bitmap::load("data/sprites/size_64/test_player_attack_right.bmp").unwrap(),
+            attack_left: Bitmap::load("data/sprites/size_64/test_player_attack_left.bmp").unwrap(),
+        },
+        enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
+        enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
+    }) };
+
+    result as RawPtr
 }
 
 pub fn update_and_render(
     screen:    &mut Bitmap,
     input:     &Input,
-    game_data: *mut Opaque,
+    game_data: RawPtr,
 ) -> String {
     #[allow(clippy::cast_ptr_alignment)]
-    let data: &mut GameData = unsafe {
-        (game_data as *mut GameData).as_mut().unwrap()
-    };
+    let data = unsafe { &mut *(game_data as *mut GameData) };
     let dt = input.dt;
 
     match data.state {
@@ -274,7 +267,7 @@ fn level_editor(
         let tile_pos = screen_pos_to_tilemap_pos(
             input.mouse.pos(),
             data.camera_pos,
-            (screen.width, screen.height),
+            (screen.width(), screen.height()),
         );
         let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Ground);
     }
@@ -282,7 +275,7 @@ fn level_editor(
         let tile_pos = screen_pos_to_tilemap_pos(
             input.mouse.pos(),
             data.camera_pos,
-            (screen.width, screen.height),
+            (screen.width(), screen.height()),
         );
         let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Empty);
     }
@@ -292,10 +285,10 @@ fn level_editor(
 
     // draw yellow outline
     let thickness = 4;
-    render::fill_rect(screen, (0, 0), (thickness, screen.height), Color::YELLOW);
-    render::fill_rect(screen, (screen.width - thickness, 0), screen.dim(), Color::YELLOW);
-    render::fill_rect(screen, (0, 0), (screen.width, thickness), Color::YELLOW);
-    render::fill_rect(screen, (0, screen.height - thickness), screen.dim(), Color::YELLOW);
+    render::fill_rect(screen, (0, 0), (thickness, screen.height()), Color::YELLOW);
+    render::fill_rect(screen, (screen.width() - thickness, 0), screen.dim(), Color::YELLOW);
+    render::fill_rect(screen, (0, 0), (screen.width(), thickness), Color::YELLOW);
+    render::fill_rect(screen, (0, screen.height() - thickness), screen.dim(), Color::YELLOW);
 
     format!("{:?}", screen.dim())
 }

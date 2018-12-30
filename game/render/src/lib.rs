@@ -14,7 +14,7 @@ pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color)
 
 pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
     let src0 = (if p.0 < 0 { -p.0 } else { 0 }, if p.1 < 0 { -p.1 } else { 0 });
-    let src1 = (src_bmp.width, src_bmp.height);
+    let src1 = (src_bmp.width(), src_bmp.height());
 
     let dst0 = p;
     let dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);

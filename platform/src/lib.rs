@@ -8,4 +8,6 @@ pub mod memory;
 pub mod time;
 pub mod debug;
 
-pub enum Opaque {}
+
+pub type RawPtr = *mut Mem;
+pub enum Mem {}
