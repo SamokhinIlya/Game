@@ -13,7 +13,10 @@ pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color)
 }
 
 pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
-    let src0 = (if p.0 < 0 { -p.0 } else { 0 }, if p.1 < 0 { -p.1 } else { 0 });
+    let src0 = (
+        if p.0 < 0 { -p.0 } else { 0 },
+        if p.1 < 0 { -p.1 } else { 0 }
+    );
     let src1 = (src_bmp.width(), src_bmp.height());
 
     let dst0 = p;
@@ -73,9 +76,7 @@ impl Color {
         Self { data }
     }
 
-    pub fn as_u32(self) -> u32 {
-        self.data
-    }
+    #[inline(always)] pub fn as_u32(self) -> u32 { self.data }
 
     pub const A_MASK: u32 = 0xFF00_0000;
     pub const R_MASK: u32 = 0x00FF_0000;
