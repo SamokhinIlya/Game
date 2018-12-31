@@ -1,18 +1,18 @@
 use core::{
-    mem,
-    mem::size_of,
+    mem::{self, size_of},
     ptr,
-    ops::Drop,
+};
+use platform::{
+    win_assert_non_null,
+    win_assert_non_zero,
+    debug,
+    graphics::Bitmap,
 };
 use winapi::{
     ctypes::*,
     shared::{minwindef::*, windef::*},
     um::winnt::*,
     um::{wingdi::*, winuser::*},
-};
-use platform::{
-    debug,
-    graphics::Bitmap,
 };
 
 pub struct Window {
@@ -29,10 +29,7 @@ impl Window {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         use winapi::um::libloaderapi::GetModuleHandleA;
 
-        let instance = unsafe { GetModuleHandleA(ptr::null()) };
-        if instance.is_null() {
-            debug::panic_with_last_error_message("GetModuleHandleA");
-        }
+        let instance = win_assert_non_null!( GetModuleHandleA(ptr::null()) );
 
         let class_name = "main_window_class\0";
         let class = WNDCLASSEXA {
@@ -49,9 +46,7 @@ impl Window {
             lpszClassName: class_name.as_ptr() as *const c_char,
             hIconSm: ptr::null_mut(), //TODO: add small icon
         };
-        if unsafe { RegisterClassExA(&class) } == 0 {
-            debug::panic_with_last_error_message("RegisterClassExA");
-        }
+        win_assert_non_zero!( RegisterClassExA(&class) );
 
         let window_name = "main_window\0";
         let window_style = WS_SYSMENU | WS_CAPTION;
@@ -61,18 +56,15 @@ impl Window {
             right: width,
             bottom: height,
         };
-        let adjust_window_rect_result = unsafe {
+        win_assert_non_zero!(
             AdjustWindowRectEx(
                 &mut window_dim, 
                 window_style | WS_VISIBLE, 
                 0, 
                 0,
             )
-        };
-        if adjust_window_rect_result == 0 {
-            debug::panic_with_last_error_message("AdjustWindowRectEx");
-        }
-        let handle = unsafe {
+        );
+        let handle = win_assert_non_null!(
             CreateWindowExA(
                 0,
                 class_name.as_ptr() as *const c_char,
@@ -87,21 +79,14 @@ impl Window {
                 instance,
                 ptr::null_mut(),
             )
-        };
-        if handle.is_null() {
-            debug::panic_with_last_error_message("CreateWindowExA");
-        }
+        );
 
         let window_placement = WINDOWPLACEMENT {
             length: size_of::<WINDOWPLACEMENT>() as u32,
             ..unsafe { mem::zeroed() }
         };
 
-        let device_context = unsafe { GetDC(handle) };
-        if device_context.is_null() {
-            //TODO: proper error handling
-            debug::panic_with_last_error_message("GetDC");
-        }
+        let device_context = win_assert_non_null!( GetDC(handle) );
 
         let bitmap_info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
@@ -131,57 +116,32 @@ impl Window {
         }
     }
 
+    #[inline(always)] pub fn width(&self) -> i32 { self.width }
+    #[inline(always)] pub fn height(&self) -> i32 { self.height }
+    #[inline(always)] pub fn handle(&self) -> HWND { self.handle }
+
     #[inline]
     pub fn is_active(&self) -> bool {
         self.handle == unsafe { GetActiveWindow() }
     }
 
-    #[inline]
-    pub fn width(&self) -> i32 { self.width }
-
-    #[inline]
-    pub fn height(&self) -> i32 { self.height }
-
-    #[inline]
-    pub fn handle(&self) -> HWND { self.handle }
-
     pub fn toggle_fullscreen(&mut self) {
-        let current_style = unsafe { GetWindowLongA(self.handle, GWL_STYLE) };
-        if current_style == 0 {
-            debug::panic_with_last_error_message("GetWindowLongA");
-        }
-        //NOTE: if windowed
+        let current_style = win_assert_non_zero!( GetWindowLongA(self.handle, GWL_STYLE) );
+        // if windowed
         if (current_style & self.windowed_style) != 0 {
+            win_assert_non_zero!( GetWindowPlacement(self.handle, &mut self.prev_placement) );
+
+            let monitor = unsafe { MonitorFromWindow(self.handle, MONITOR_DEFAULTTOPRIMARY) };
             let mut monitor_info = MONITORINFO {
                 cbSize: size_of::<MONITORINFO>() as u32,
                 ..unsafe { mem::zeroed() }
             };
+            win_assert_non_zero!( GetMonitorInfoA(monitor, &mut monitor_info) );
 
-            let get_window_placement_result =
-                unsafe { GetWindowPlacement(self.handle, &mut self.prev_placement) };
-            if get_window_placement_result == 0 {
-                debug::panic_with_last_error_message("GetWindowPlacement");
-            }
-
-            let monitor = unsafe { MonitorFromWindow(self.handle, MONITOR_DEFAULTTOPRIMARY) };
-
-            let get_monitor_info_result =
-                unsafe { GetMonitorInfoA(monitor, &mut monitor_info) };
-            if get_monitor_info_result == 0 {
-                debug::panic_with_last_error_message("GetMonitorInfoA");
-            }
-
-            if unsafe {
-                SetWindowLongA(self.handle, GWL_STYLE, current_style & !self.windowed_style)
-            } == 0
-            {
-                debug::panic_with_last_error_message("SetWindowLongA");
-            }
-            let fullscreen_window_width =
-                monitor_info.rcMonitor.right - monitor_info.rcMonitor.left;
-            let fullscreen_window_height =
-                monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top;
-            let set_window_pos_result = unsafe {
+            let fullscreen_window_width = monitor_info.rcMonitor.right - monitor_info.rcMonitor.left;
+            let fullscreen_window_height = monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top;
+            win_assert_non_zero!( SetWindowLongA(self.handle, GWL_STYLE, current_style & !self.windowed_style) );
+            win_assert_non_zero!(
                 SetWindowPos(
                     self.handle,
                     HWND_TOP,
@@ -191,27 +151,15 @@ impl Window {
                     fullscreen_window_height,
                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED, //TODO: check other options and NOOWNERZORDER
                 )
-            };
-            if set_window_pos_result == 0 {
-                debug::panic_with_last_error_message("SetWindowPos");
-            }
+            );
 
             self.width = fullscreen_window_width;
             self.height = fullscreen_window_height;
+        // if fullscreen
         } else {
-            //NOTE: if fullscreen
-            if unsafe {
-                SetWindowLongA(self.handle, GWL_STYLE, current_style | self.windowed_style)
-            } == 0
-            {
-                debug::panic_with_last_error_message("SetWindowLongA");
-            }
-
-            if unsafe { SetWindowPlacement(self.handle, &self.prev_placement) } == 0 {
-                debug::panic_with_last_error_message("SetWindowPlacement");
-            }
-
-            let set_window_pos_result = unsafe {
+            win_assert_non_zero!( SetWindowLongA(self.handle, GWL_STYLE, current_style | self.windowed_style) );
+            win_assert_non_zero!( SetWindowPlacement(self.handle, &self.prev_placement) );
+            win_assert_non_zero!(
                 SetWindowPos(
                     self.handle,
                     ptr::null_mut(),
@@ -225,15 +173,9 @@ impl Window {
                         | SWP_NOOWNERZORDER
                         | SWP_FRAMECHANGED,
                 )
-            };
-            if set_window_pos_result == 0 {
-                debug::panic_with_last_error_message("SetWindowPos");
-            }
-
+            );
             let mut client_rect = unsafe { mem::uninitialized() };
-            if unsafe { GetClientRect(self.handle, &mut client_rect) } == 0 {
-                debug::panic_with_last_error_message("GetClientRect");
-            }
+            win_assert_non_zero!( GetClientRect(self.handle, &mut client_rect) );
 
             self.width = client_rect.right;
             self.height = client_rect.bottom;
@@ -268,14 +210,6 @@ impl Window {
     }
 }
 
-impl Drop for Window {
-    fn drop(&mut self) {
-        if unsafe { DestroyWindow(self.handle) } == 0 {
-            debug::panic_with_last_error_message("DestroyWindow");
-        }
-    }
-}
-
 unsafe extern "system" fn window_class_proc(
     window_handle: HWND,
     message: UINT,
@@ -286,15 +220,13 @@ unsafe extern "system" fn window_class_proc(
         WM_COMPACTING - system needs more memory, so we should free
         WM_INPUTLANGCHANGE 
     */
+
+    let mut result = 0;
     match message {
-        WM_CLOSE => {
-            PostQuitMessage(0);
-            0
-        }
-        WM_ACTIVATEAPP => {
-            //TODO: pause the game and something else maybe
-            0
-        }
-        _ => DefWindowProcA(window_handle, message, w_param, l_param),
+        WM_CLOSE       => PostQuitMessage(0),
+        WM_ACTIVATEAPP => (), //TODO: pause the game and something else maybe
+        _              => result = DefWindowProcA(window_handle, message, w_param, l_param),
     }
+
+    result
 }

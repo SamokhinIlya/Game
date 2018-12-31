@@ -1,15 +1,22 @@
-use super::*;
 use core::{
     mem,
     ptr,
     result::Result,
     convert::From,
 };
-use winapi::ctypes::*;
-use winapi::um::{
-    fileapi::{CreateFileA, GetFileSizeEx, ReadFile, WriteFile, CREATE_ALWAYS, OPEN_EXISTING},
-    handleapi::{CloseHandle, INVALID_HANDLE_VALUE},
-    winnt::{FILE_ATTRIBUTE_NORMAL, GENERIC_READ, GENERIC_WRITE},
+use super::*;
+use winapi::{
+    ctypes::*,
+    um::{
+        fileapi::{
+            CreateFileA, GetFileSizeEx, ReadFile, WriteFile,
+            CREATE_ALWAYS, OPEN_EXISTING,
+        },
+        handleapi::{
+            CloseHandle, INVALID_HANDLE_VALUE
+        },
+        winnt::{FILE_ATTRIBUTE_NORMAL, GENERIC_READ, GENERIC_WRITE},
+    },
 };
 
 pub struct File {
@@ -58,8 +65,7 @@ impl File {
         };
         let file_buffer_ptr = unsafe { memory::allocate_bytes(bytes_to_read) };
         let mut bytes_read = unsafe { mem::uninitialized() };
-
-        let read_file_result = unsafe {
+        win_assert_non_zero!(
             ReadFile(
                 file_handle,
                 file_buffer_ptr as *mut c_void,
@@ -67,27 +73,26 @@ impl File {
                 &mut bytes_read,
                 ptr::null_mut(),
             )
-        };
-        if unsafe { CloseHandle(file_handle) } == 0 {
-            debug::panic_with_last_error_message("CloseHandle");
-        }
-        if read_file_result == 0 {
-            debug::panic_with_last_error_message("ReadFile");
-        }
+        );
         assert!(bytes_to_read == bytes_read as usize);
 
-        Ok(Self {
-            data: file_buffer_ptr,
-            size: bytes_to_read,
-        })
+        win_assert_non_zero!( CloseHandle(file_handle) );
+
+        Ok(
+            Self {
+                data: file_buffer_ptr,
+                size: bytes_to_read,
+            }
+        )
     }
 
     pub fn write<T>(filepath: &str, value: &T) -> Result<(), FileErr>
     where
         T: core::marker::Sized,
     {
-        use std::io::Write;
         assert!(filepath.len() <= 256);
+        use std::io::Write;
+
         let mut str_buffer: [u8; 256] = unsafe { mem::uninitialized() };
         write!(&mut str_buffer as &mut [u8], "{}\0", filepath).unwrap();
         //TODO: check if W version is better
@@ -107,7 +112,7 @@ impl File {
         }
 
         let mut bytes_written = unsafe { mem::uninitialized() };
-        let write_file_result = unsafe {
+        win_assert_non_zero!(
             WriteFile(
                 file_handle,
                 value as *const T as *const c_void,
@@ -115,13 +120,8 @@ impl File {
                 &mut bytes_written,
                 ptr::null_mut(),
             )
-        };
-        if unsafe { CloseHandle(file_handle) } == 0 {
-            debug::panic_with_last_error_message("CloseHandle");
-        }
-        if write_file_result == 0 {
-            debug::panic_with_last_error_message("WriteFile");
-        }
+        );
+        win_assert_non_zero!( CloseHandle(file_handle) );
 
         Ok(())
     }

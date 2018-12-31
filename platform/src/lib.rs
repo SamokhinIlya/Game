@@ -1,3 +1,7 @@
+#![allow(unused_unsafe)]
+// for debug macros,
+// when attributes on expressions gets stabilized this will be removed
+
 extern crate core;
 extern crate winapi;
 
@@ -6,6 +10,7 @@ pub mod graphics;
 pub mod input;
 pub mod memory;
 pub mod time;
+#[macro_use]
 pub mod debug;
 
 

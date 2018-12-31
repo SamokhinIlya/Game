@@ -33,13 +33,11 @@ fn main() {
                     let is_down = key_state < 0;
                     input.keyboard[key].update(is_down);
                 }
+
                 let mut mouse_point = unsafe { mem::uninitialized() };
-                if unsafe { GetCursorPos(&mut mouse_point) } == 0 {
-                    debug::panic_with_last_error_message("GetCursorPos");
-                }
-                if unsafe { ScreenToClient(window.handle(), &mut mouse_point) } == 0 {
-                    debug::panic_with_last_error_message("ScreenToClient");
-                }
+                win_assert_non_zero!( GetCursorPos(&mut mouse_point) );
+                win_assert_non_zero!( ScreenToClient(window.handle(), &mut mouse_point) );
+
                 input.mouse.x = mouse_point.x;
                 input.mouse.y = mouse_point.y;
                 input.mouse[MouseKey::LB].update(unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0);

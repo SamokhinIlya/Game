@@ -42,8 +42,7 @@ pub struct MouseState {
 }
 
 impl MouseState {
-    #[inline]
-    pub fn pos(&self) -> (i32, i32) { (self.x, self.y) }
+    #[inline(always)] pub fn pos(&self) -> (i32, i32) { (self.x, self.y) }
 }
 
 //TODO: other buttons
@@ -74,32 +73,17 @@ pub struct DigitalKey {
 
 #[allow(dead_code)]
 impl DigitalKey {
-    #[inline]
-    fn from_bools(curr: bool, prev: bool) -> Self {
-        Self { curr, prev }
-    }
+    #[inline(always)] pub fn is_down(self) -> bool { self.curr }
+    #[inline(always)] pub fn is_up(self) -> bool { !self.curr }
 
-    #[inline]
+    #[inline(always)] pub fn pressed(self) -> bool { self.curr && !self.prev }
+    #[inline(always)] pub fn released(self) -> bool { !self.curr && self.prev }
+
+    #[inline(always)]
     pub fn update(&mut self, new: bool) {
         self.prev = self.curr;
         self.curr = new;
     }
-
-    #[inline]
-    pub fn pressed(self) -> bool {
-        self.curr && !self.prev
-    }
-
-    #[inline]
-    pub fn released(self) -> bool {
-        !self.curr && self.prev
-    }
-
-    #[inline]
-    pub fn is_down(self) -> bool { self.curr }
-
-    #[inline]
-    pub fn is_up(self) -> bool { !self.curr }
 }
 
 #[derive(Copy, Clone, Debug)]

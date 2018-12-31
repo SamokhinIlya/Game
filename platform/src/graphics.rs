@@ -38,12 +38,13 @@ impl Bitmap {
             memory::allocate_bytes(width as usize * height as usize * size_of::<u32>())
                 as *mut u32
         };
+
         Self { data, width, height }
     }
 
-    #[inline(always)] pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
     #[inline(always)] pub fn width(&self) -> i32 { self.width }
     #[inline(always)] pub fn height(&self) -> i32 { self.height }
+    #[inline(always)] pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
 
     #[inline(always)] pub unsafe fn data(&self) -> *mut u32 { self.data }
 
