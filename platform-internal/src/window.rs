@@ -11,8 +11,7 @@ use platform::{
 use winapi::{
     ctypes::*,
     shared::{minwindef::*, windef::*},
-    um::winnt::*,
-    um::{wingdi::*, winuser::*},
+    um::{winnt::*, wingdi::*, winuser::*},
 };
 
 pub struct Window {
@@ -28,9 +27,7 @@ pub struct Window {
 impl Window {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         use winapi::um::libloaderapi::GetModuleHandleA;
-
         let instance = win_assert_non_null!( GetModuleHandleA(ptr::null()) );
-
         let class_name = "main_window_class\0";
         let class = WNDCLASSEXA {
             cbSize: size_of::<WNDCLASSEXA>() as u32,
@@ -50,7 +47,7 @@ impl Window {
 
         let window_name = "main_window\0";
         let window_style = WS_SYSMENU | WS_CAPTION;
-        let mut window_dim = winapi::shared::windef::RECT {
+        let mut window_dim = RECT {
             left: 0,
             top: 0,
             right: width,
@@ -96,11 +93,7 @@ impl Window {
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB,
-                biSizeImage: 0,
-                biXPelsPerMeter: 0,
-                biYPelsPerMeter: 0,
-                biClrUsed: 0,
-                biClrImportant: 0,
+                ..unsafe { mem::zeroed() }
             },
             bmiColors: unsafe { mem::zeroed() },
         };
@@ -129,17 +122,20 @@ impl Window {
         let current_style = win_assert_non_zero!( GetWindowLongA(self.handle, GWL_STYLE) );
         // if windowed
         if (current_style & self.windowed_style) != 0 {
-            win_assert_non_zero!( GetWindowPlacement(self.handle, &mut self.prev_placement) );
+            let monitor_info = {
+                let monitor = unsafe { MonitorFromWindow(self.handle, MONITOR_DEFAULTTOPRIMARY) };
+                let mut mon_info = MONITORINFO {
+                    cbSize: size_of::<MONITORINFO>() as u32,
+                    ..unsafe { mem::zeroed() }
+                };
+                win_assert_non_zero!( GetMonitorInfoA(monitor, &mut mon_info) );
 
-            let monitor = unsafe { MonitorFromWindow(self.handle, MONITOR_DEFAULTTOPRIMARY) };
-            let mut monitor_info = MONITORINFO {
-                cbSize: size_of::<MONITORINFO>() as u32,
-                ..unsafe { mem::zeroed() }
+                mon_info
             };
-            win_assert_non_zero!( GetMonitorInfoA(monitor, &mut monitor_info) );
-
             let fullscreen_window_width = monitor_info.rcMonitor.right - monitor_info.rcMonitor.left;
             let fullscreen_window_height = monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top;
+
+            win_assert_non_zero!( GetWindowPlacement(self.handle, &mut self.prev_placement) );
             win_assert_non_zero!( SetWindowLongA(self.handle, GWL_STYLE, current_style & !self.windowed_style) );
             win_assert_non_zero!(
                 SetWindowPos(
@@ -157,8 +153,8 @@ impl Window {
             self.height = fullscreen_window_height;
         // if fullscreen
         } else {
-            win_assert_non_zero!( SetWindowLongA(self.handle, GWL_STYLE, current_style | self.windowed_style) );
             win_assert_non_zero!( SetWindowPlacement(self.handle, &self.prev_placement) );
+            win_assert_non_zero!( SetWindowLongA(self.handle, GWL_STYLE, current_style | self.windowed_style) );
             win_assert_non_zero!(
                 SetWindowPos(
                     self.handle,
@@ -183,8 +179,8 @@ impl Window {
     }
 
     pub fn blit(&self, bmp: &Bitmap) {
-        let blit_result = unsafe {
-            StretchDIBits(
+        unsafe {
+            let blit_result = StretchDIBits(
                 self.device_context,
                 0,
                 0,
@@ -198,10 +194,40 @@ impl Window {
                 &self.bitmap_info,
                 DIB_RGB_COLORS,
                 SRCCOPY,
-            )
-        };
-        if blit_result == 0 {
-            panic!("StretchDIBits in Window::blit(...) failed");
+            );
+            if blit_result == 0 {
+                panic!(
+                    "StretchDIBits in Window::blit(...) failed.
+                    StretchDIBits {{
+                        hdc: {:p},
+                        xDest: {},
+                        yDest: {},
+                        DestWidth: {},
+                        DestHeight: {},
+                        xSrc: {},
+                        ySrc: {},
+                        SrcWidth: {},
+                        SrcHeight: {},
+                        lpBits: {:p},
+                        lpbmi: {:p},
+                        iUsage: {},
+                        rop: {},
+                    }}",
+                    self.device_context,
+                    0,
+                    0,
+                    self.width,
+                    self.height,
+                    0,
+                    0,
+                    bmp.width(),
+                    bmp.height(),
+                    bmp.data() as *const c_void,
+                    &self.bitmap_info,
+                    DIB_RGB_COLORS,
+                    SRCCOPY,
+                );
+            }
         }
     }
 
