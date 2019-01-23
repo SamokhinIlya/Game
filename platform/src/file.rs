@@ -3,6 +3,7 @@ use core::{
     ptr,
     result::Result,
     convert::From,
+    marker::Sized,
 };
 use super::*;
 use winapi::{
@@ -19,27 +20,20 @@ use winapi::{
     },
 };
 
-pub struct File {
-    pub data: *mut u8,
-    pub size: usize,
-}
-
-impl core::ops::Drop for File {
-    fn drop(&mut self) {
-        if !self.data.is_null() {
-            unsafe {
-                memory::deallocate(self.data);
-            }
-        }
-    }
-}
+pub struct File(Box<[u8]>);
 
 impl File {
+    pub fn size(&self) -> usize { self.0.len() }
+    pub unsafe fn as_ptr(&self) -> *const u8 { self.0.as_ptr() }
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut u8 { self.0.as_mut_ptr() }
+
     pub fn read(filepath: &str) -> Result<Self, FileErr> {
         use std::io::Write;
+
         assert!(filepath.len() <= 256);
         let mut str_buffer: [u8; 256] = unsafe { mem::uninitialized() };
         write!(&mut str_buffer as &mut [u8], "{}\0", filepath).unwrap();
+
         //TODO: check if W version is better
         let file_handle = unsafe {
             CreateFileA(
@@ -49,52 +43,52 @@ impl File {
                 ptr::null_mut(), //TODO: check others
                 OPEN_EXISTING,
                 FILE_ATTRIBUTE_NORMAL, //TODO: check others
-                ptr::null_mut(),       //NOTE: ignored when opening existing file
+                ptr::null_mut(),       // ignored when opening existing file
             )
         };
         if file_handle == INVALID_HANDLE_VALUE {
             return Err(FileErr::SomeError);
         }
 
-        let bytes_to_read = unsafe {
+        let file_size = unsafe {
             let mut size = mem::uninitialized();
-            if GetFileSizeEx(file_handle, &mut size) == 0 {
-                debug::panic_with_last_error_message("GetFileSizeEx");
-            }
+            win_assert_non_zero!(
+                GetFileSizeEx(file_handle, &mut size)
+            );
             *size.QuadPart() as usize
         };
-        let file_buffer_ptr = unsafe { memory::allocate_bytes(bytes_to_read) };
+        let mut file_buffer = Vec::<u8>::with_capacity(file_size);
         let mut bytes_read = unsafe { mem::uninitialized() };
         win_assert_non_zero!(
             ReadFile(
                 file_handle,
-                file_buffer_ptr as *mut c_void,
-                bytes_to_read as u32,
+                file_buffer.as_mut_ptr() as *mut c_void,
+                file_size as u32,
                 &mut bytes_read,
                 ptr::null_mut(),
             )
         );
-        assert!(bytes_to_read == bytes_read as usize);
+        assert_eq!(file_size, bytes_read as usize);
+        unsafe {
+            file_buffer.set_len(bytes_read as usize);
+        }
 
-        win_assert_non_zero!( CloseHandle(file_handle) );
+        win_assert_non_zero!(
+            CloseHandle(file_handle)
+        );
 
-        Ok(
-            Self {
-                data: file_buffer_ptr,
-                size: bytes_to_read,
-            }
-        )
+        Ok(Self(file_buffer.into_boxed_slice()))
     }
 
     pub fn write<T>(filepath: &str, value: &T) -> Result<(), FileErr>
-    where
-        T: core::marker::Sized,
+        where T: Sized,
     {
-        assert!(filepath.len() <= 256);
         use std::io::Write;
 
+        assert!(filepath.len() <= 256);
         let mut str_buffer: [u8; 256] = unsafe { mem::uninitialized() };
         write!(&mut str_buffer as &mut [u8], "{}\0", filepath).unwrap();
+
         //TODO: check if W version is better
         let file_handle = unsafe {
             CreateFileA(
@@ -121,7 +115,9 @@ impl File {
                 ptr::null_mut(),
             )
         );
-        win_assert_non_zero!( CloseHandle(file_handle) );
+        win_assert_non_zero!(
+            CloseHandle(file_handle)
+        );
 
         Ok(())
     }
@@ -136,6 +132,7 @@ pub enum FileErr {
 pub trait Load
     where Self: Sized + From<File>,
 {
+    //TODO: use std's Path
     fn load(filepath: &str) -> Result<Self, LoadErr>;
 }
 

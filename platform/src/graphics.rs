@@ -30,23 +30,20 @@ impl Drop for Bitmap {
 }
 
 impl Bitmap {
+    pub fn width(&self) -> i32 { self.width }
+    pub fn height(&self) -> i32 { self.height }
+    pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
+    pub unsafe fn data(&self) -> *mut u32 { self.data }
+
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         assert!(width > 0 && height > 0);
 
-        #[allow(clippy::cast_ptr_alignment)]
         let data = unsafe {
-            memory::allocate_bytes(width as usize * height as usize * size_of::<u32>())
-                as *mut u32
+            memory::allocate_array::<u32>(width as usize * height as usize)
         };
 
         Self { data, width, height }
     }
-
-    #[inline(always)] pub fn width(&self) -> i32 { self.width }
-    #[inline(always)] pub fn height(&self) -> i32 { self.height }
-    #[inline(always)] pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
-
-    #[inline(always)] pub unsafe fn data(&self) -> *mut u32 { self.data }
 
     pub fn clamped_view(&self, mut top_left: (i32, i32), mut bottom_right: (i32, i32)) -> BitmapView {
         utils::point_clamp(&mut top_left, (0, 0), self.dim());
@@ -149,19 +146,21 @@ impl From<File> for Bitmap {
             BITMAPV5HEADER: BITMAPV5HEADER,
         };
 
-        let header = unsafe { ptr::read(file.data as *mut BitmapHeader) };
+        let header = unsafe {
+            ptr::read_unaligned(file.as_ptr() as *const BitmapHeader)
+        };
         let BM: u16 = ('B' as u16) | ('M' as u16) << 8;
         assert!(header.BITMAPFILEHEADER.bfType == BM);
 
         let bmp_data = unsafe {
-            memory::allocate_bytes(header.BITMAPV5HEADER.bV5SizeImage as usize) as *mut u32
+            memory::allocate_array::<u32>(header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>())
         };
         let bmp_width = header.BITMAPV5HEADER.bV5Width;
         let bmp_height = header.BITMAPV5HEADER.bV5Height;
 
         let mut dst_row: *mut u32 = bmp_data;
         let mut src_row: *mut u32 = unsafe {
-            file.data.add(
+            file.as_ptr().add(
                 header.BITMAPFILEHEADER.bfOffBits as usize
                     + ((bmp_height - 1) * bmp_width) as usize * size_of::<u32>()
             ) as *mut u32

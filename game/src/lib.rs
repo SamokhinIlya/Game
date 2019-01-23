@@ -4,7 +4,7 @@ use platform::{
     file::Load,
     graphics::Bitmap,
     input::{Input, KBKey, MouseKey},
-    memory, RawPtr,
+    RawPtr,
 };
 use render::Color;
 use utils::*;
@@ -65,7 +65,7 @@ struct PlayerBmps {
 }
 
 pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
-    let result = unsafe { memory::allocate(GameData {
+    let result = Box::new(GameData {
         state: GameState::LevelEditor,
         tilemap: Tilemap::load("data/levels/map_00").unwrap_or_else(|_| Tilemap::new()),
         camera_pos: v2!(0.0, 0.0),
@@ -83,9 +83,9 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
         },
         enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
         enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
-    }) };
+    });
 
-    result as RawPtr
+    Box::into_raw(result) as RawPtr
 }
 
 pub fn update_and_render(
@@ -206,11 +206,6 @@ fn playing(
     render::clear(screen, Color::BLACK);
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
 
-    let bmp = match data.player.facing_direction {
-        FacingDirection::Right => &data.player_bmps.right,
-        FacingDirection::Left => &data.player_bmps.left,
-    };
-    data.player.draw(screen, bmp, data.camera_pos);
     if data.player_attack.health > 0 {
         let bmp = match data.player_attack.facing_direction {
             FacingDirection::Right => &data.player_bmps.attack_right,

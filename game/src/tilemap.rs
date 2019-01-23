@@ -147,8 +147,8 @@ impl Tilemap {
 impl Load for Tilemap {
     fn load(filepath: &str) -> Result<Self, LoadErr> {
         match File::read(filepath) {
-            Ok(file) => if file.size as usize == mem::size_of::<Tilemap>() {
-                Ok(Tilemap::from(file))
+            Ok(file) => if file.size() == mem::size_of::<Self>() {
+                Ok(Self::from(file))
             } else {
                 Err(LoadErr::NotValid)
             },
@@ -160,7 +160,9 @@ impl Load for Tilemap {
 impl core::convert::From<File> for Tilemap {
     fn from(file: File) -> Self {
         #[allow(clippy::cast_ptr_alignment)]
-        unsafe { ptr::read(file.data as *mut Self) }
+        unsafe {
+            ptr::read_unaligned(file.as_ptr() as *const Self)
+        }
     }
 }
 
