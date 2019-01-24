@@ -1,5 +1,5 @@
 use core::{
-    mem::size_of,
+    mem::{self, size_of},
     ptr,
     convert::From,
     ops::Drop,
@@ -7,7 +7,6 @@ use core::{
     slice,
 };
 use crate::{
-    memory,
     file,
     file::{
         File,
@@ -23,8 +22,9 @@ pub struct Bitmap {
 
 impl Drop for Bitmap {
     fn drop(&mut self) {
+        let capacity = (self.width * self.height) as usize;
         unsafe {
-            memory::deallocate(self.data);
+            let _ = Vec::from_raw_parts(self.data, capacity, capacity);
         }
     }
 }
@@ -38,8 +38,11 @@ impl Bitmap {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         assert!(width > 0 && height > 0);
 
-        let data = unsafe {
-            memory::allocate_array::<u32>(width as usize * height as usize)
+        let data = {
+            let mut vec = Vec::<u32>::with_capacity(width as usize * height as usize);
+            let ptr = vec.as_mut_ptr();
+            mem::forget(vec);
+            ptr
         };
 
         Self { data, width, height }
@@ -153,7 +156,10 @@ impl From<File> for Bitmap {
         assert!(header.BITMAPFILEHEADER.bfType == BM);
 
         let bmp_data = unsafe {
-            memory::allocate_array::<u32>(header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>())
+            let mut vec = Vec::<u32>::with_capacity(header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>());
+            let ptr = vec.as_mut_ptr();
+            mem::forget(vec);
+            ptr
         };
         let bmp_width = header.BITMAPV5HEADER.bV5Width;
         let bmp_height = header.BITMAPV5HEADER.bV5Height;

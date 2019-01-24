@@ -1,9 +1,10 @@
 use core::{
-    mem,
-    ptr,
-    result::Result,
     convert::From,
     marker::Sized,
+    mem,
+    ops::Deref,
+    ptr,
+    result::Result,
 };
 use super::*;
 use winapi::{
@@ -21,6 +22,13 @@ use winapi::{
 };
 
 pub struct File(Box<[u8]>);
+
+impl Deref for File {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl File {
     pub fn size(&self) -> usize { self.0.len() }
