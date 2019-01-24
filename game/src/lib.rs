@@ -206,6 +206,11 @@ fn playing(
     render::clear(screen, Color::BLACK);
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
 
+    let bmp = match data.player.facing_direction {
+        FacingDirection::Right => &data.player_bmps.right,
+        FacingDirection::Left => &data.player_bmps.left,
+    };
+    data.player.draw(screen, bmp, data.camera_pos);
     if data.player_attack.health > 0 {
         let bmp = match data.player_attack.facing_direction {
             FacingDirection::Right => &data.player_bmps.attack_right,
