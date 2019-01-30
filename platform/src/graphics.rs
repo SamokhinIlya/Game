@@ -1,8 +1,8 @@
 use core::{
     mem::{self, size_of},
     ptr,
-    convert::From,
-    ops::Drop,
+    convert::{From, Into},
+    ops::{Drop, Index, IndexMut},
     iter::Iterator,
     slice,
 };
@@ -29,6 +29,23 @@ impl Drop for Bitmap {
     }
 }
 
+impl Index<(usize, usize)> for Bitmap {
+    type Output = u32;
+    fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+        unsafe {
+            &*self.data.add(y * self.width as usize + x)
+        }
+    }
+}
+
+impl IndexMut<(usize, usize)> for Bitmap {
+    fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut u32 {
+        unsafe {
+            &mut *self.data.add(y * self.width as usize + x)
+        }
+    }
+}
+
 impl Bitmap {
     pub fn width(&self) -> i32 { self.width }
     pub fn height(&self) -> i32 { self.height }
@@ -48,6 +65,16 @@ impl Bitmap {
         Self { data, width, height }
     }
 
+    pub fn filled<C>(self, color: C) -> Self
+        where C: Into<u32> + Clone
+    {
+        let slice = unsafe {
+            slice::from_raw_parts_mut(self.data, (self.width * self.height) as usize)
+        };
+        slice.iter_mut().for_each(|p| *p = color.clone().into());
+        self
+    }
+
     pub fn clamped_view(&self, mut top_left: (i32, i32), mut bottom_right: (i32, i32)) -> BitmapView {
         utils::point_clamp(&mut top_left, (0, 0), self.dim());
         utils::point_clamp(&mut bottom_right, (0, 0), self.dim());
@@ -59,7 +86,7 @@ impl Bitmap {
 
         BitmapView {
             ptr,
-            max_ptr: unsafe { ptr.offset(height * self.width as isize) },
+            end: unsafe { ptr.offset(height * self.width as isize) },
             width: (bottom_right.0 - top_left.0) as usize,
             bmp: self,
         }
@@ -68,7 +95,7 @@ impl Bitmap {
 
 pub struct BitmapView<'a> {
     ptr: *mut u32,
-    max_ptr: *mut u32,
+    end: *mut u32,
     width: usize,
     bmp: &'a Bitmap,
 }
@@ -76,7 +103,7 @@ pub struct BitmapView<'a> {
 impl<'a> Iterator for BitmapView<'a> {
     type Item = &'a mut [u32];
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ptr < self.max_ptr {
+        if self.ptr < self.end {
             unsafe {
                 let slice = slice::from_raw_parts_mut(self.ptr, self.width);
                 self.ptr = self.ptr.add(self.bmp.width as usize);

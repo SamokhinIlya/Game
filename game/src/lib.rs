@@ -1,4 +1,12 @@
 extern crate core;
+extern crate utils;
+extern crate rusttype;
+
+mod render;
+#[macro_use]
+mod vector;
+mod tilemap;
+
 use platform::{
     file,
     file::Load,
@@ -6,13 +14,8 @@ use platform::{
     input::{Input, KBKey, MouseKey},
     RawPtr,
 };
-use render::Color;
 use utils::*;
-
-#[macro_use]
-mod vector;
-mod tilemap;
-
+use crate::render::Color;
 use crate::vector::{
     V2,
     distance_sq,
@@ -55,6 +58,8 @@ struct GameData {
     pub player_bmps: PlayerBmps,
     pub enemy_bmp_right: Bitmap,
     pub enemy_bmp_left: Bitmap,
+
+    pub font_bmp: Bitmap,
 }
 
 struct PlayerBmps {
@@ -83,6 +88,7 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
         },
         enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
         enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
+        font_bmp: render::render_font(include_bytes!("../../data/fonts/Inconsolata-Regular.ttf")),
     });
 
     Box::into_raw(result) as RawPtr
@@ -110,14 +116,13 @@ fn playing(
     data:   &mut GameData,
     dt:     f32,
 ) -> String {
-    if input.keyboard[KBKey::K].pressed()
-    && input.keyboard[KBKey::Ctrl].is_down() {
+    use KBKey::*;
+    if input.keyboard[K].pressed() && input.keyboard[Ctrl].is_down() {
         data.state = GameState::LevelEditor;
         render::clear(screen, Color::BLACK);
     }
 
     let direction = {
-        use platform::input::KBKey::*;
         let (left, right, _down, _up) = (
             input.keyboard[A].is_down(),
             input.keyboard[D].is_down(),
@@ -134,15 +139,14 @@ fn playing(
             (true, false) => -1.0,
             _             =>  0.0,
         };
-        let y = if input.keyboard[KBKey::K].pressed() { 1.0 } else { 0.0 };
+        let y = if input.keyboard[K].pressed() { 1.0 } else { 0.0 };
         v2!(x, y)
     };
     if data.player_attack.health > 0 {
         for enemy in &mut data.enemies {
-            if aabb_collision(
-                Rect2::from_center_size(data.player_attack.pos, data.player_attack.size),
-                Rect2::from_center_size(enemy.pos, enemy.size),
-            ) {
+            let player_hitbox = Rect2::from_center_size(data.player_attack.pos, data.player_attack.size);
+            let enemy_hurtbox = Rect2::from_center_size(enemy.pos, enemy.size);
+            if aabb_collision(player_hitbox, enemy_hurtbox) {
                 enemy.health -= 1;
             }
         }
@@ -158,7 +162,7 @@ fn playing(
             data.player.facing_direction = FacingDirection::Left;
         }
 
-        if input.keyboard[KBKey::J].pressed() {
+        if input.keyboard[J].pressed() {
             data.player_attack_counter = 0.1;
             data.player_attack.health = 1;
             data.player_attack.facing_direction = data.player.facing_direction;
@@ -237,15 +241,11 @@ fn level_editor(
     data:   &mut GameData,
     dt:     f32,
 ) -> String {
-    if input.keyboard[KBKey::K].pressed()
-    && input.keyboard[KBKey::Ctrl].is_down()
-    {
+    if input.keyboard[KBKey::K].pressed() && input.keyboard[KBKey::Ctrl].is_down() {
         data.state = GameState::Playing;
     }
 
-    if input.keyboard[KBKey::S].pressed()
-    && input.keyboard[KBKey::Ctrl].is_down()
-    {
+    if input.keyboard[KBKey::S].pressed() && input.keyboard[KBKey::Ctrl].is_down() {
         file::File::write("data/levels/map_00", &data.tilemap).unwrap();
     }
 
@@ -289,6 +289,8 @@ fn level_editor(
     render::fill_rect(screen, (screen.width() - thickness, 0), screen.dim(), Color::YELLOW);
     render::fill_rect(screen, (0, 0), (screen.width(), thickness), Color::YELLOW);
     render::fill_rect(screen, (0, screen.height() - thickness), screen.dim(), Color::YELLOW);
+
+    render::draw_bmp(screen, &data.font_bmp, (0, 0));
 
     format!("{:?}", screen.dim())
 }
@@ -436,6 +438,11 @@ fn entity_collision(e0: &Entity, e1: &Entity) -> bool {
 struct Rect2(V2, V2);
 
 impl Rect2 {
+    #[inline(always)] pub fn right(self)  -> f32 { self.1.x }
+    #[inline(always)] pub fn left(self)   -> f32 { self.0.x }
+    #[inline(always)] pub fn top(self)    -> f32 { self.1.y }
+    #[inline(always)] pub fn bottom(self) -> f32 { self.0.y }
+    
     pub fn from_bb(v0: V2, v1: V2) -> Self {
         Rect2(v0, v1)
     }
@@ -446,22 +453,13 @@ impl Rect2 {
             v2!(center.x + size.right_offset, center.y + size.top_offset),
         )
     }
-    
-    #[inline]
-    pub fn right(self)  -> f32 { self.1.x }
-    #[inline]
-    pub fn left(self)   -> f32 { self.0.x }
-    #[inline]
-    pub fn top(self)    -> f32 { self.1.y }
-    #[inline]
-    pub fn bottom(self) -> f32 { self.0.y }
 }
 
 fn aabb_collision(rect0: Rect2, rect1: Rect2) -> bool {
     rect0.right() > rect1.left()
-    && rect0.left() < rect1.right()
-    && rect0.top() > rect1.bottom()
-    && rect0.bottom() < rect1.top()
+        && rect0.left() < rect1.right()
+        && rect0.top() > rect1.bottom()
+        && rect0.bottom() < rect1.top()
 }
 
 fn h_tilemap_collision(

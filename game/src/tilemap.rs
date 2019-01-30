@@ -1,8 +1,9 @@
-use core::{ ptr, mem };
+use core::{ptr, mem};
 use platform::{
     graphics::Bitmap,
     file::{File, Load, LoadErr},
 };
+use crate::render;
 use crate::vector::V2;
 
 pub const TILE_SIZE: i32 = 64;

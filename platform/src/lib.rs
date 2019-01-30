@@ -12,6 +12,5 @@ pub mod time;
 #[macro_use]
 pub mod debug;
 
-
 pub type RawPtr = *mut Mem;
 pub enum Mem {}
