@@ -1,18 +1,11 @@
 use core::{
     mem::{self, size_of},
     ptr,
-    convert::{From, Into},
     ops::{Drop, Index, IndexMut},
     iter::Iterator,
     slice,
 };
-use crate::{
-    file,
-    file::{
-        File,
-        Load,
-    },
-};
+use crate::file::*;
 
 pub struct Bitmap {
     data: *mut u32,
@@ -115,19 +108,13 @@ impl<'a> Iterator for BitmapView<'a> {
     }
 }
 
-impl Load for Bitmap {
-    fn load(filepath: &str) -> Result<Self, file::LoadErr> {
-        match file::File::read(filepath) {
-            Ok(file) => Ok(Bitmap::from(file)),
-            Err(err) => Err(file::LoadErr::FileErr(err)),
-        }
-    }
-}
+use std::path::Path;
 
-//TODO: remove all hardcoding
-impl From<File> for Bitmap {
+impl Load for Bitmap {
     #[allow(non_snake_case, clippy::cast_ptr_alignment)]
-    fn from(file: File) -> Self {
+    fn load<P: AsRef<Path>>(filepath: P) -> std::io::Result<Self> {
+        let file = read_entire_file(filepath)?;
+
         #[repr(C, packed)]
         #[derive(Copy, Clone, Debug)]
         struct BITMAPFILEHEADER {
@@ -212,10 +199,10 @@ impl From<File> for Bitmap {
             }
         }
 
-        Bitmap {
+        Ok(Bitmap {
             data: bmp_data,
             width: bmp_width,
             height: bmp_height,
-        }
+        })
     }
 }

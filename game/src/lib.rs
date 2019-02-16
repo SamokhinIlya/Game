@@ -8,8 +8,7 @@ mod vector;
 mod tilemap;
 
 use platform::{
-    file,
-    file::Load,
+    file::*,
     graphics::Bitmap,
     input::{Input, KBKey, MouseKey},
     RawPtr,
@@ -246,7 +245,7 @@ fn level_editor(
     }
 
     if input.keyboard[KBKey::S].pressed() && input.keyboard[KBKey::Ctrl].is_down() {
-        file::File::write("data/levels/map_00", &data.tilemap).unwrap();
+        write_to_file("data/levels/map_00", &data.tilemap).unwrap();
     }
 
     if !input.keyboard[KBKey::Ctrl].is_down() {

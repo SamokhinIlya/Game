@@ -1,7 +1,7 @@
 use core::{ptr, mem};
 use platform::{
     graphics::Bitmap,
-    file::{File, Load, LoadErr},
+    file::*,
 };
 use crate::render;
 use crate::vector::V2;
@@ -146,23 +146,19 @@ impl Tilemap {
 }
 
 impl Load for Tilemap {
-    fn load(filepath: &str) -> Result<Self, LoadErr> {
-        match File::read(filepath) {
-            Ok(file) => if file.size() == mem::size_of::<Self>() {
-                Ok(Self::from(file))
-            } else {
-                Err(LoadErr::NotValid)
-            },
-            Err(err) => Err(LoadErr::FileErr(err)),
-        }
-    }
-}
+    fn load<P: AsRef<std::path::Path>>(filepath: P) -> std::io::Result<Self> {
+        let file = read_entire_file(filepath)?;
+        if file.len() == mem::size_of::<Self>() {
+            #[allow(clippy::cast_ptr_alignment)]
+            let tilemap = unsafe {
+                ptr::read_unaligned(file.as_ptr() as *const Self)
+            };
 
-impl core::convert::From<File> for Tilemap {
-    fn from(file: File) -> Self {
-        #[allow(clippy::cast_ptr_alignment)]
-        unsafe {
-            ptr::read_unaligned(file.as_ptr() as *const Self)
+            Ok(tilemap)
+        } else {
+            use std::io::{Error, ErrorKind};
+
+            Err(Error::new(ErrorKind::InvalidInput, ""))
         }
     }
 }
