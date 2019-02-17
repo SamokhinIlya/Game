@@ -1,6 +1,7 @@
+mod window;
+
 use core::{mem, ptr};
 use platform::*;
-use platform_internal::*;
 use winapi::{ctypes::*, um::winuser::*};
 
 /* TODO:
@@ -13,9 +14,9 @@ use winapi::{ctypes::*, um::winuser::*};
 fn main() {
     time::init();
     let mut window = window::Window::with_dimensions(1920 / 2, 1080 / 2);
-    let mut window_bmp = graphics::Bitmap::with_dimensions(window.width(), window.height());
+    let window_bmp = graphics::WindowBuffer::with_dimensions(window.width(), window.height());
     let mut input = input::Input::default();
-    let game_data_ptr = game::startup(window_bmp.width(), window_bmp.height());
+    let game_data_ptr = game::startup(window_bmp.width, window_bmp.height);
    
     let mut running = true;
     let mut went_inactive = false;
@@ -61,10 +62,10 @@ fn main() {
         }
 
         let game_update_counter = time::Counter::start();
-        let game_info: String = game::update_and_render(&mut window_bmp, &input, game_data_ptr);
+        let game_info: String = game::update_and_render(window_bmp, &input, game_data_ptr);
         let game_update_ms_elapsed = game_update_counter.end().as_ms();
 
-        window.blit(&window_bmp);
+        window.blit(window_bmp);
 
         //TODO: wait a bit
         let mut frame_ticks_elapsed = frame_counter.elapsed();

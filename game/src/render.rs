@@ -1,6 +1,5 @@
-use core::convert::From;
 use utils::clamp;
-use platform::graphics::Bitmap;
+use crate::bitmap::Bitmap;
 
 pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color) {
     for row in dst_bmp.clamped_view(p0, p1) {

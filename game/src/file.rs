@@ -1,25 +1,31 @@
-// TODO: this is platform-independent and should not be there
-use core::{
+use std::{
     marker::Sized,
+    path::Path,
 };
-use std::path::Path;
 
 pub trait Load
     where Self: Sized
 {
-    fn load<P: AsRef<Path>>(filepath: P) -> std::io::Result<Self>;
+    fn load<P>(filepath: P) -> std::io::Result<Self>
+        where P: AsRef<Path>;
 }
 
-pub fn read_entire_file<P: AsRef<Path>>(filepath: P) -> std::io::Result<Vec<u8>> {
+pub fn read_entire_file<P>(filepath: P) -> std::io::Result<Vec<u8>>
+    where P: AsRef<Path>
+{
     use std::io::Read;
 
     let f = std::fs::File::open(filepath)?;
     let mut v = Vec::new();
     std::io::BufReader::new(f).read_to_end(&mut v)?;
+
     Ok(v)
 }
 
-pub fn write_to_file<T: Sized, P: AsRef<Path>>(filepath: P, val: &T) -> std::io::Result<()> {
+pub fn write_to_file<P, T>(filepath: P, val: &T) -> std::io::Result<()>
+    where P: AsRef<Path>,
+          T: Sized
+{
     use std::io::Write;
 
     let mut f = std::fs::File::create(filepath)?;

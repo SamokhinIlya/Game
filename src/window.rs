@@ -6,7 +6,7 @@ use platform::{
     win_assert_non_null,
     win_assert_non_zero,
     debug,
-    graphics::Bitmap,
+    graphics::WindowBuffer,
 };
 use winapi::{
     ctypes::*,
@@ -27,8 +27,8 @@ pub struct Window {
 impl Window {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         use winapi::um::libloaderapi::GetModuleHandleA;
+
         let instance = win_assert_non_null!( GetModuleHandleA(ptr::null()) );
-        let class_name = "main_window_class\0";
         let class = WNDCLASSEXA {
             cbSize: size_of::<WNDCLASSEXA>() as u32,
             style: CS_HREDRAW | CS_VREDRAW, //TODO: check if CS_DBLCLKS is needed
@@ -40,12 +40,11 @@ impl Window {
             hCursor: ptr::null_mut(), //TODO: check if this works and add cursor later maybe
             hbrBackground: ptr::null_mut(),
             lpszMenuName: ptr::null_mut(),
-            lpszClassName: class_name.as_ptr() as *const c_char,
+            lpszClassName: "main_window_class\0".as_ptr() as *const c_char,
             hIconSm: ptr::null_mut(), //TODO: add small icon
         };
         win_assert_non_zero!( RegisterClassExA(&class) );
 
-        let window_name = "main_window\0";
         let window_style = WS_SYSMENU | WS_CAPTION;
         let mut window_dim = RECT {
             left: 0,
@@ -64,8 +63,8 @@ impl Window {
         let handle = win_assert_non_null!(
             CreateWindowExA(
                 0,
-                class_name.as_ptr() as *const c_char,
-                window_name.as_ptr() as *const c_char,
+                class.lpszClassName,
+                "main_window\0".as_ptr() as *const c_char,
                 window_style | WS_VISIBLE,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
@@ -178,9 +177,9 @@ impl Window {
         }
     }
 
-    pub fn blit(&self, bmp: &Bitmap) {
-        unsafe {
-            let blit_result = StretchDIBits(
+    pub fn blit(&self, bmp: WindowBuffer) {
+        let blit_result = unsafe {
+            StretchDIBits(
                 self.device_context,
                 0,
                 0,
@@ -188,46 +187,46 @@ impl Window {
                 self.height,
                 0,
                 0,
-                bmp.width(),
-                bmp.height(),
-                bmp.data() as *const c_void,
+                bmp.width,
+                bmp.height,
+                bmp.data,
+                &self.bitmap_info,
+                DIB_RGB_COLORS,
+                SRCCOPY,
+            )
+        };
+        if blit_result == 0 {
+            panic!(
+                "StretchDIBits in Window::blit(...) failed.
+                StretchDIBits {{
+                    hdc: {:p},
+                    xDest: {},
+                    yDest: {},
+                    DestWidth: {},
+                    DestHeight: {},
+                    xSrc: {},
+                    ySrc: {},
+                    SrcWidth: {},
+                    SrcHeight: {},
+                    lpBits: {:p},
+                    lpbmi: {:p},
+                    iUsage: {},
+                    rop: {},
+                }}",
+                self.device_context,
+                0,
+                0,
+                self.width,
+                self.height,
+                0,
+                0,
+                bmp.width,
+                bmp.height,
+                bmp.data,
                 &self.bitmap_info,
                 DIB_RGB_COLORS,
                 SRCCOPY,
             );
-            if blit_result == 0 {
-                panic!(
-                    "StretchDIBits in Window::blit(...) failed.
-                    StretchDIBits {{
-                        hdc: {:p},
-                        xDest: {},
-                        yDest: {},
-                        DestWidth: {},
-                        DestHeight: {},
-                        xSrc: {},
-                        ySrc: {},
-                        SrcWidth: {},
-                        SrcHeight: {},
-                        lpBits: {:p},
-                        lpbmi: {:p},
-                        iUsage: {},
-                        rop: {},
-                    }}",
-                    self.device_context,
-                    0,
-                    0,
-                    self.width,
-                    self.height,
-                    0,
-                    0,
-                    bmp.width(),
-                    bmp.height(),
-                    bmp.data() as *const c_void,
-                    &self.bitmap_info,
-                    DIB_RGB_COLORS,
-                    SRCCOPY,
-                );
-            }
         }
     }
 

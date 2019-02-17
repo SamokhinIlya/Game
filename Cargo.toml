@@ -17,8 +17,6 @@ features = [
     "profileapi",
     "handleapi",
 ]
-[dependencies.platform-internal]
-path = "platform-internal"
 [dependencies.platform]
 path = "platform"
 [dependencies.game]

@@ -1,10 +1,8 @@
-use core::{ptr, mem};
-use platform::{
-    graphics::Bitmap,
-    file::*,
-};
+use std::{ptr, mem};
 use crate::render;
 use crate::vector::V2;
+use crate::bitmap::Bitmap;
+use crate::file::{Load, read_entire_file};
 
 pub const TILE_SIZE: i32 = 64;
 //FIXME: these should be derived from TILE_SIZE and screen_size

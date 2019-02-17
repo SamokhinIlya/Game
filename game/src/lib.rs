@@ -2,14 +2,14 @@ extern crate core;
 extern crate utils;
 extern crate rusttype;
 
-mod render;
 #[macro_use]
 mod vector;
 mod tilemap;
+mod bitmap;
+mod render;
+mod file;
 
 use platform::{
-    file::*,
-    graphics::Bitmap,
     input::{Input, KBKey, MouseKey},
     RawPtr,
 };
@@ -28,6 +28,8 @@ use crate::tilemap::{
     screen_pos_to_tilemap_pos,
     tilemap_pos_to_screen_pos,
 };
+use crate::bitmap::Bitmap;
+use crate::file::{Load, write_to_file};
 
 /* TODO:
   - visuals:
@@ -94,17 +96,18 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
 }
 
 pub fn update_and_render(
-    screen:    &mut Bitmap,
-    input:     &Input,
-    game_data: RawPtr,
+    window_buffer: platform::graphics::WindowBuffer,
+    input:         &Input,
+    game_data:     RawPtr,
 ) -> String {
+    let mut window_bmp = Bitmap::from(window_buffer);
     #[allow(clippy::cast_ptr_alignment)]
     let data = unsafe { &mut *(game_data as *mut GameData) };
     let dt = input.dt;
 
     match data.state {
-        GameState::Playing => playing(screen, input, data, dt),
-        GameState::LevelEditor => level_editor(screen, input, data, dt),
+        GameState::Playing => playing(&mut window_bmp, input, data, dt),
+        GameState::LevelEditor => level_editor(&mut window_bmp, input, data, dt),
     }
 }
 
@@ -245,6 +248,7 @@ fn level_editor(
     }
 
     if input.keyboard[KBKey::S].pressed() && input.keyboard[KBKey::Ctrl].is_down() {
+        //TODO: trait for saving into file
         write_to_file("data/levels/map_00", &data.tilemap).unwrap();
     }
 

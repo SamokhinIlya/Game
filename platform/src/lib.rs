@@ -5,12 +5,10 @@
 extern crate core;
 extern crate winapi;
 
-pub mod file;
+#[macro_use] pub mod debug;
 pub mod graphics;
 pub mod input;
 pub mod time;
-#[macro_use]
-pub mod debug;
 
 pub type RawPtr = *mut Mem;
 pub enum Mem {}
