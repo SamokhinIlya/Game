@@ -319,13 +319,18 @@ struct Entity {
     pub size: Size,
     pub facing_direction: FacingDirection,
     pub health: i32,
-    pub on_the_ground: bool,
+    pub state: EntityState,
 }
 
 #[derive(Copy, Clone)]
 enum FacingDirection {
     Left,
     Right,
+}
+
+enum EntityState {
+    OnTheGround,
+    InTheAir{jumped_again: bool},
 }
 
 impl Entity {
@@ -343,7 +348,7 @@ impl Entity {
             },
             health: 1,
             facing_direction: FacingDirection::Right,
-            on_the_ground: false,
+            state: EntityState::InTheAir{jumped_again: true},
         }
     }
 
@@ -365,24 +370,31 @@ impl Entity {
 
 impl std::fmt::Display for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let airborne = if self.on_the_ground { "_" } else { "^" };
+        let airborne = match self.state {
+            EntityState::OnTheGround => "_",
+            EntityState::InTheAir{jumped_again: _} => "^",
+        };
         write!(f, "({}, {}) |{}|", self.pos.x, self.pos.y, airborne)
     }
 }
 
 //TODO: derive consts from height and length of a desired jump
 fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
-    assert!(direction.x >= -1.0 && direction.x <= 1.0
-         && direction.y >= -1.0 && direction.y <= 1.0, "direction = {}", direction);
+    assert!(direction.x >= -1.0 && direction.x <= 1.0, "direction = {}", direction);
+    assert!(direction.y >= -1.0 && direction.y <= 1.0, "direction = {}", direction);
 
     const ACCELERATION: f32 = 50.0;
 
-    let acc_x = if entity.on_the_ground {
-        let friction = -8.0 * entity.vel.x;
-        direction.x * ACCELERATION + friction
-    } else {
-        let air_movement_penalty = -direction.x * ACCELERATION * 0.8;
-        direction.x * ACCELERATION + air_movement_penalty
+    // TODO: match on entity state in one place
+    let acc_x = match entity.state {
+        EntityState::OnTheGround => {
+            let friction = -8.0 * entity.vel.x;
+            direction.x * ACCELERATION + friction
+        },
+        EntityState::InTheAir{jumped_again} => {
+            let air_movement_penalty = -direction.x * ACCELERATION * 0.8;
+            direction.x * ACCELERATION + if !jumped_again {air_movement_penalty} else {0.0}
+        },
     };
     let mut dx = 0.5 * acc_x * dt*dt + entity.vel.x * dt;
     entity.vel.x += acc_x * dt;
@@ -400,12 +412,19 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
     }
     entity.pos.x += dx;
 
-    if entity.on_the_ground && direction.y > 0.0 {
-        entity.vel.y = 40.0;
-        entity.on_the_ground = false;
-    } else {
-        const GRAVITY: f32 = -80.0;
-        entity.vel.y += 0.5 * GRAVITY * dt;
+    match entity.state {
+        EntityState::OnTheGround if direction.y > 0.0 => {
+            entity.vel.y = 40.0;
+            entity.state = EntityState::InTheAir{jumped_again: false};
+        },
+        EntityState::InTheAir{jumped_again: false} if direction.y > 0.0 => {
+            entity.vel.y = 40.0;
+            entity.state = EntityState::InTheAir{jumped_again: true};
+        },
+        _ => {
+            const GRAVITY: f32 = -80.0;
+            entity.vel.y += 0.5 * GRAVITY * dt;
+        },
     }
     clamp(&mut entity.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
 
@@ -416,11 +435,15 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
                 entity.vel.y = 0.0;
                 tile_y       as f32 - entity.pos.y - entity.size.top_offset    * 1.01
             } else {
-                entity.on_the_ground = true;
+                entity.state = EntityState::OnTheGround;
                 (tile_y + 1) as f32 - entity.pos.y - entity.size.bottom_offset * 1.01
             }
-        } else if entity.on_the_ground {
-            entity.on_the_ground = false;
+        } else {
+            match entity.state {
+                EntityState::OnTheGround =>
+                    entity.state = EntityState::InTheAir{jumped_again: false},
+                _ => (),
+            }
         }
     }
     entity.pos.y += dy;
