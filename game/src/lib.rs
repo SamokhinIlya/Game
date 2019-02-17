@@ -105,10 +105,13 @@ pub fn update_and_render(
     let data = unsafe { &mut *(game_data as *mut GameData) };
     let dt = input.dt;
 
-    match data.state {
+    let info = match data.state {
         GameState::Playing => playing(&mut window_bmp, input, data, dt),
         GameState::LevelEditor => level_editor(&mut window_bmp, input, data, dt),
-    }
+    };
+
+    std::mem::forget(window_bmp);
+    info
 }
 
 #[allow(clippy::useless_format)]
