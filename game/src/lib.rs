@@ -79,7 +79,7 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
         player_attack: Entity::with_pos_health(V2::new(), 0),
         player_attacking: false,
         player_attack_counter: 0.0,
-        enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 1); 1],
+        enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 5); 1],
         tile_bitmaps: [Bitmap::load("data/sprites/size_64/test_tile.bmp").unwrap(); 1],
         player_bmps: PlayerBmps {
             right: Bitmap::load("data/sprites/size_64/test_player_right.bmp").unwrap(),
@@ -147,18 +147,16 @@ fn playing(
         let y = if input.keyboard[K].pressed() { 1.0 } else { 0.0 };
         v2!(x, y)
     };
-    if data.player_attack.health > 0 {
+    if data.player_attack.health.hp > 0 {
         for enemy in &mut data.enemies {
-            let player_hitbox = Rect2::from_center_size(data.player_attack.pos, data.player_attack.size);
-            let enemy_hurtbox = Rect2::from_center_size(enemy.pos, enemy.size);
-            if aabb_collision(player_hitbox, enemy_hurtbox) {
-                enemy.health -= 1;
+            if entity_collision(&data.player_attack, enemy) {
+                enemy.health.hp -= 1;
             }
         }
 
         data.player_attack_counter -= dt;
         if data.player_attack_counter < 0.0 {
-            data.player_attack.health = 0;
+            data.player_attack.health.hp = 0;
         }
     } else {
         if direction.x > 0.0 {
@@ -169,22 +167,26 @@ fn playing(
 
         if input.keyboard[J].pressed() {
             data.player_attack_counter = 0.1;
-            data.player_attack.health = 1;
+            data.player_attack.health.hp = 1;
             data.player_attack.facing_direction = data.player.facing_direction;
+            data.player_attack.pos = v2!(
+                data.player.pos.x + match data.player_attack.facing_direction {
+                    FacingDirection::Right => 1.0,
+                    FacingDirection::Left => -1.0,
+                },
+                data.player.pos.y,
+            );
         } 
     }
     entity_move(&mut data.player, &data.tilemap, direction, dt);
-    data.player_attack.pos = v2!(
-        data.player.pos.x + match data.player.facing_direction {
-            FacingDirection::Right => 1.0,
-            FacingDirection::Left => -1.0,
-        },
-        data.player.pos.y,
-    );
+    data.player_attack.pos.x += match data.player.facing_direction {
+        FacingDirection::Right => 1.0,
+        FacingDirection::Left => -1.0,
+    };
 
     for enemy in &mut data.enemies {
         let mut direction = v2!(0.0, 0.0);
-        if distance_sq(enemy.pos, data.player.pos) >= 4.0 {
+        if distance_sq(enemy.pos, data.player.pos) >= 16.0 {
             direction.x = if enemy.pos.x < data.player.pos.x { 1.0 } else { -1.0 };
             direction.y = if enemy.pos.y < data.player.pos.y { 1.0 } else {  0.0 };
         }
@@ -220,7 +222,7 @@ fn playing(
         FacingDirection::Left => &data.player_bmps.left,
     };
     data.player.draw(screen, bmp, data.camera_pos);
-    if data.player_attack.health > 0 {
+    if data.player_attack.health.hp > 0 {
         let bmp = match data.player_attack.facing_direction {
             FacingDirection::Right => &data.player_bmps.attack_right,
             FacingDirection::Left => &data.player_bmps.attack_left,
@@ -325,8 +327,8 @@ struct Entity {
     pub vel: V2,
     pub size: Size,
     pub facing_direction: FacingDirection,
-    pub health: i32,
-    pub state: EntityState,
+    pub health: Health,
+    pub movement_state: MovementState,
 }
 
 #[derive(Copy, Clone)]
@@ -335,9 +337,19 @@ enum FacingDirection {
     Right,
 }
 
-enum EntityState {
+enum MovementState {
     OnTheGround,
     InTheAir{jumped_again: bool},
+}
+
+struct Health {
+    hp: i32,
+    knockback: Knockback,
+}
+
+enum Knockback {
+    No,
+    Knocked{time_remaining: f32},
 }
 
 impl Entity {
@@ -353,21 +365,21 @@ impl Entity {
                 right_offset:    0.5 - 1.0 / 8.0,
                 left_offset:   -(0.5 - 1.0 / 8.0),
             },
-            health: 1,
+            health: Health {hp: 1, knockback: Knockback::No},
             facing_direction: FacingDirection::Right,
-            state: EntityState::InTheAir{jumped_again: true},
+            movement_state: MovementState::InTheAir{jumped_again: true},
         }
     }
 
-    pub fn with_pos_health(pos: V2, health: i32) -> Self {
+    pub fn with_pos_health(pos: V2, hp: i32) -> Self {
         let mut entity = Self::new();
         entity.pos = pos;
-        entity.health = health;
+        entity.health.hp = hp;
         entity
     }
 
     pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2) {
-        if self.health <= 0 {
+        if self.health.hp <= 0 {
             return
         }
         let (x0, y0) = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
@@ -377,9 +389,9 @@ impl Entity {
 
 impl std::fmt::Display for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let airborne = match self.state {
-            EntityState::OnTheGround => "_",
-            EntityState::InTheAir{jumped_again: _} => "^",
+        let airborne = match self.movement_state {
+            MovementState::OnTheGround => "_",
+            MovementState::InTheAir{jumped_again: _} => "^",
         };
         write!(f, "({}, {}) |{}|", self.pos.x, self.pos.y, airborne)
     }
@@ -392,8 +404,8 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
 
     const ACCELERATION_COEFFICIENT: f32 = 50.0;
 
-    let (new_vel_x, acc_x) = match entity.state {
-        EntityState::OnTheGround => {
+    let (new_vel_x, acc_x) = match entity.movement_state {
+        MovementState::OnTheGround => {
             let acc_x = {
                 let friction = -8.0 * entity.vel.x;
                 direction.x * ACCELERATION_COEFFICIENT + friction
@@ -401,7 +413,7 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
             let new_vel_x = entity.vel.x + acc_x * dt;
             (new_vel_x, acc_x)
         },
-        EntityState::InTheAir{jumped_again} => {
+        MovementState::InTheAir{jumped_again} => {
             let acc_x = {
                 let air_movement_penalty = if !jumped_again {
                     -direction.x * ACCELERATION_COEFFICIENT * 0.8
@@ -414,13 +426,13 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
             (new_vel_x, acc_x)
         },
     };
-    let new_vel_y = match entity.state {
-        EntityState::OnTheGround if direction.y > 0.0 => {
-            entity.state = EntityState::InTheAir{jumped_again: false};
+    let new_vel_y = match entity.movement_state {
+        MovementState::OnTheGround if direction.y > 0.0 => {
+            entity.movement_state = MovementState::InTheAir{jumped_again: false};
             40.0
         },
-        EntityState::InTheAir{jumped_again: false} if direction.y > 0.0 => {
-            entity.state = EntityState::InTheAir{jumped_again: true};
+        MovementState::InTheAir{jumped_again: false} if direction.y > 0.0 => {
+            entity.movement_state = MovementState::InTheAir{jumped_again: true};
             20.0
         },
         _ => {
@@ -453,13 +465,13 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
                 entity.vel.y = 0.0;
                 tile_y       as f32 - entity.pos.y - entity.size.top_offset    * 1.01
             } else {
-                entity.state = EntityState::OnTheGround;
+                entity.movement_state = MovementState::OnTheGround;
                 (tile_y + 1) as f32 - entity.pos.y - entity.size.bottom_offset * 1.01
             }
         } else {
-            match entity.state {
-                EntityState::OnTheGround =>
-                    entity.state = EntityState::InTheAir{jumped_again: false},
+            match entity.movement_state {
+                MovementState::OnTheGround =>
+                    entity.movement_state = MovementState::InTheAir{jumped_again: false},
                 _ => (),
             }
         }
