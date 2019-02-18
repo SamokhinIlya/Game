@@ -390,22 +390,50 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
     assert!(direction.x >= -1.0 && direction.x <= 1.0, "direction = {}", direction);
     assert!(direction.y >= -1.0 && direction.y <= 1.0, "direction = {}", direction);
 
-    const ACCELERATION: f32 = 50.0;
+    const ACCELERATION_COEFFICIENT: f32 = 50.0;
 
-    // TODO: match on entity state in one place
-    let acc_x = match entity.state {
+    let (new_vel_x, acc_x) = match entity.state {
         EntityState::OnTheGround => {
-            let friction = -8.0 * entity.vel.x;
-            direction.x * ACCELERATION + friction
+            let acc_x = {
+                let friction = -8.0 * entity.vel.x;
+                direction.x * ACCELERATION_COEFFICIENT + friction
+            };
+            let new_vel_x = entity.vel.x + acc_x * dt;
+            (new_vel_x, acc_x)
         },
         EntityState::InTheAir{jumped_again} => {
-            let air_movement_penalty = -direction.x * ACCELERATION * 0.8;
-            direction.x * ACCELERATION + if !jumped_again {air_movement_penalty} else {0.0}
+            let acc_x = {
+                let air_movement_penalty = if !jumped_again {
+                    -direction.x * ACCELERATION_COEFFICIENT * 0.8
+                } else {
+                    0.0
+                };
+                direction.x * ACCELERATION_COEFFICIENT + air_movement_penalty
+            };
+            let new_vel_x = entity.vel.x + acc_x * dt;
+            (new_vel_x, acc_x)
+        },
+    };
+    let new_vel_y = match entity.state {
+        EntityState::OnTheGround if direction.y > 0.0 => {
+            entity.state = EntityState::InTheAir{jumped_again: false};
+            40.0
+        },
+        EntityState::InTheAir{jumped_again: false} if direction.y > 0.0 => {
+            entity.state = EntityState::InTheAir{jumped_again: true};
+            20.0
+        },
+        _ => {
+            const GRAVITY: f32 = -80.0;
+            entity.vel.y + 0.5 * GRAVITY * dt
         },
     };
     let mut dx = 0.5 * acc_x * dt*dt + entity.vel.x * dt;
-    entity.vel.x += acc_x * dt;
+    let mut dy = entity.vel.y * dt;
+    entity.vel.x = new_vel_x;
+    entity.vel.y = new_vel_y;
     clamp(&mut entity.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
+    clamp(&mut entity.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
 
     if dx != 0.0 {
         if let Some(tile_x) = h_tilemap_collision(entity, tilemap, dx) {
@@ -419,23 +447,6 @@ fn entity_move(entity: &mut Entity, tilemap: &Tilemap, direction: V2, dt: f32) {
     }
     entity.pos.x += dx;
 
-    match entity.state {
-        EntityState::OnTheGround if direction.y > 0.0 => {
-            entity.vel.y = 40.0;
-            entity.state = EntityState::InTheAir{jumped_again: false};
-        },
-        EntityState::InTheAir{jumped_again: false} if direction.y > 0.0 => {
-            entity.vel.y = 40.0;
-            entity.state = EntityState::InTheAir{jumped_again: true};
-        },
-        _ => {
-            const GRAVITY: f32 = -80.0;
-            entity.vel.y += 0.5 * GRAVITY * dt;
-        },
-    }
-    clamp(&mut entity.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
-
-    let mut dy = entity.vel.y * dt;
     if dy != 0.0 {
         if let Some(tile_y) = v_tilemap_collision(entity, tilemap, dy) {
             dy = if dy > 0.0 {
@@ -473,11 +484,11 @@ impl Rect2 {
     #[inline(always)] pub fn bottom(self) -> f32 { self.0.y }
     
     pub fn from_bb(v0: V2, v1: V2) -> Self {
-        Rect2(v0, v1)
+        Self(v0, v1)
     }
 
     pub fn from_center_size(center: V2, size: Size) -> Self {
-        Rect2(
+        Self(
             v2!(center.x + size.left_offset, center.y + size.bottom_offset),
             v2!(center.x + size.right_offset, center.y + size.top_offset),
         )
@@ -485,10 +496,8 @@ impl Rect2 {
 }
 
 fn aabb_collision(rect0: Rect2, rect1: Rect2) -> bool {
-    rect0.right() > rect1.left()
-        && rect0.left() < rect1.right()
-        && rect0.top() > rect1.bottom()
-        && rect0.bottom() < rect1.top()
+    rect0.right() > rect1.left() && rect0.left() < rect1.right()
+        && rect0.top() > rect1.bottom() && rect0.bottom() < rect1.top()
 }
 
 fn h_tilemap_collision(
@@ -499,13 +508,13 @@ fn h_tilemap_collision(
     let u_tile_y = (entity.pos.y + entity.size.top_offset   ).floor() as i32;
     let d_tile_y = (entity.pos.y + entity.size.bottom_offset).floor() as i32;
 
-    let (offset                  , step_x) = if dx > 0.0 {
-        (entity.size.right_offset, 1     )
+    let (offset, step_x) = if dx > 0.0 {
+        (entity.size.right_offset, 1)
     } else {
-        (entity.size.left_offset , -1    )
+        (entity.size.left_offset , -1)
     };
     let from_x = (entity.pos.x + offset).floor() as i32;
-    let to_x =   (entity.pos.x + offset + dx).floor() as i32;
+    let to_x = (entity.pos.x + offset + dx).floor() as i32;
 
     let mut tile_x = from_x;
     loop {
@@ -534,13 +543,13 @@ fn v_tilemap_collision(
     let r_tile_x = (entity.pos.x + entity.size.right_offset).floor() as i32;
     let l_tile_x = (entity.pos.x + entity.size.left_offset ).floor() as i32;
 
-    let (offset                   , step_y) = if dy > 0.0 {
-        (entity.size.top_offset   , 1     )
+    let (offset, step_y) = if dy > 0.0 {
+        (entity.size.top_offset, 1)
     } else {
-        (entity.size.bottom_offset, -1    )
+        (entity.size.bottom_offset, -1)
     };
     let from_y = (entity.pos.y + offset).floor() as i32;
-    let to_y =   (entity.pos.y + offset + dy).floor() as i32;
+    let to_y = (entity.pos.y + offset + dy).floor() as i32;
 
     let mut tile_y = from_y;
     loop {

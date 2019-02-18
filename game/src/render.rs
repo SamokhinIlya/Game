@@ -12,7 +12,7 @@ pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color)
 pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
     let src0 = (
         if p.0 < 0 { -p.0 } else { 0 },
-        if p.1 < 0 { -p.1 } else { 0 }
+        if p.1 < 0 { -p.1 } else { 0 },
     );
     let src1 = (src_bmp.width(), src_bmp.height());
 
@@ -98,11 +98,13 @@ pub fn render_font(font_data: &'static [u8]) -> Bitmap {
     for g in glyphs {
         if let Some(bb) = g.pixel_bounding_box() {
             g.draw(|x, y, v| {
-                let color = if v > 0.5 { Color::WHITE } else { Color::BLACK };
+                let color = Color::rgb(v, v, v);
                 let x = x as i32 + bb.min.x;
                 let y = y as i32 + bb.min.y;
                 // There's still a possibility that the glyph clips the boundaries of the bitmap
-                if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
+                if x >= 0 && x < width as i32
+                    && y >= 0 && y < pixel_height as i32
+                {
                     let x = x as usize;
                     let y = y as usize;
                     font_bmp[(x, y)] = color.into();
