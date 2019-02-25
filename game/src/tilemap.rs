@@ -77,32 +77,27 @@ impl Tilemap {
         }
     }
 
-    pub fn get_unchecked(&self, x: i32, y: i32) -> Tile {
-        debug_assert!(x >= 0 && x < self.width
-                   && y >= 0 && y < self.height);
+    pub unsafe fn get_unchecked(&self, x: i32, y: i32) -> Tile {
+        debug_assert!(x >= 0 && x < self.width && y >= 0 && y < self.height);
         self.map[y as usize][x as usize]
     }
 
     pub fn get(&self, x: i32, y: i32) -> Option<Tile> {
-        if     x >= 0 && x < self.width
-            && y >= 0 && y < self.height
-        {
-            Some(self.map[y as usize][x as usize])
+        if x >= 0 && x < self.width && y >= 0 && y < self.height {
+            Some(unsafe { self.get_unchecked(x, y) })
         } else {
             None
         }
     }
 
-    pub fn set_unchecked(&mut self, x: i32, y: i32, tile: Tile) {
-        debug_assert!(x >= 0 && x < self.width
-                   && y >= 0 && y < self.height);
+    pub unsafe fn set_unchecked(&mut self, x: i32, y: i32, tile: Tile) {
+        debug_assert!(x >= 0 && x < self.width && y >= 0 && y < self.height);
         self.map[y as usize][x as usize] = tile;
     }
 
     pub fn set(&mut self, x: i32, y: i32, tile: Tile) -> Result<(), ()> {
-        if x >= 0 && x < self.width
-        && y >= 0 && y < self.height {
-            self.map[y as usize][x as usize] = tile;
+        if x >= 0 && x < self.width && y >= 0 && y < self.height {
+            unsafe { self.set_unchecked(x, y, tile) }
             Ok(())
         } else {
             Err(())
@@ -125,7 +120,7 @@ impl Tilemap {
                 if tile_x < 0 { continue }
                 if tile_x >= self.width { break }
 
-                let tile = self.get_unchecked(tile_x, tile_y);
+                let tile = unsafe { self.get_unchecked(tile_x, tile_y) };
                 if !tile.is_visible() { continue }
 
                 let tile_bmp: &Bitmap = get_tile_bmp(tile_bitmaps, tile);

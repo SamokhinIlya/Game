@@ -1,5 +1,7 @@
-use core::{
-    ops::{Add, Sub, Mul},
+use core::ops::{
+    Add, AddAssign,
+    Sub,
+    Mul,
 };
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -15,15 +17,18 @@ macro_rules! v2 {
 }
 
 impl V2 {
-    pub fn new() -> Self {
-        v2!(0.0, 0.0)
-    }
+    pub const ZERO: Self = v2!(0.0, 0.0);
 }
 
 impl Add for V2 {
     type Output = V2;
     fn add(self, rhs: V2) -> V2 {
         v2!(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+impl AddAssign for V2 {
+    fn add_assign(&mut self, rhs: V2) {
+        *self = *self + rhs;
     }
 }
 
