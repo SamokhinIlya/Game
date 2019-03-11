@@ -61,7 +61,7 @@ struct GameData {
     pub enemy_bmp_right: Bitmap,
     pub enemy_bmp_left: Bitmap,
 
-    pub font_bmp: Bitmap,
+    pub font_bmp: render::FontBitmaps,
 }
 
 struct PlayerBmps {
@@ -92,7 +92,7 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
         },
         enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
         enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
-        font_bmp: render::render_font(include_bytes!("../../data/fonts/Inconsolata-Regular.ttf")),
+        font_bmp: render::FontBitmaps::load("data/fonts/Inconsolata-Regular.ttf").unwrap(),
     });
 
     Box::into_raw(result) as RawPtr
@@ -377,7 +377,7 @@ fn level_editor(
         render::fill_rect(screen, (0, screen.height() - thickness), screen.dim(), Color::YELLOW);
     } 
 
-    render::draw_bmp(screen, &data.font_bmp, (0, 0));
+    data.font_bmp.draw_string(screen, (100, 100), "Hello, World!");
 
     format!("{:?}", screen.dim())
 }

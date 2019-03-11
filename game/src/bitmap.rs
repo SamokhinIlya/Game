@@ -165,7 +165,7 @@ impl Load for Bitmap {
         let header = unsafe {
             ptr::read_unaligned(file.as_ptr() as *const BitmapHeader)
         };
-        let BM: u16 = ('B' as u16) | ('M' as u16) << 8;
+        const BM: u16 = ('B' as u16) | ('M' as u16) << 8;
         assert!(header.BITMAPFILEHEADER.bfType == BM);
 
         let bmp_data = {
