@@ -1,6 +1,7 @@
 use core::ops::{
     Add, AddAssign,
     Sub,
+    Neg,
     Mul,
 };
 
@@ -36,6 +37,13 @@ impl Sub for V2 {
     type Output = V2;
     fn sub(self, rhs: V2) -> V2 {
         v2!(self.x - rhs.x, self.y - rhs.y)
+    }
+}
+
+impl Neg for V2 {
+    type Output = V2;
+    fn neg(self) -> Self {
+        v2!(-self.x, -self.y)
     }
 }
 

@@ -130,43 +130,31 @@ fn playing(
         data.state = GameState::LevelEditor;
         render::clear(screen, Color::BLACK);
     }
+    let jmp_check;
 
-    let player_command = {
-        let (left, right) = (
-            input.keyboard[A].is_down(),
-            input.keyboard[D].is_down(),
-        );
-        let dir = match (left, right) {
-            (false, true) => Some(Direction::Right),
-            (true, false) => Some(Direction::Left),
-            _             => None,
-        };
-        let jump = input.keyboard[K].pressed();
-        MovementCommand::Platformer { dir, jump }
-    };
-    if let MovementCommand::Platformer { dir: Some(dir), .. } = player_command {
-        data.player.facing_direction = dir;
-    }
+    // attack update ///////////////////////////////////////////////////////////////
     if data.player_attack.health.hp > 0 {
         for enemy in &mut data.enemies {
             let size = data.player_attack.size;
+            let pos = data.player_attack.pos;
             let player_attack_hitbox = Rect2::from_bbox(
-                data.player_attack.pos + v2!(size.left_offset, size.bottom_offset),
-                data.player_attack.pos + v2!(1.0, 0.0) + v2!(size.right_offset, size.top_offset),
+                pos + v2!(size.left_offset, size.bottom_offset),
+                pos + v2!(1.0, 0.0) + v2!(size.right_offset, size.top_offset),
             );
             let enemy_hurtbox = Rect2::from_center_size(enemy.pos, enemy.size);
-            if aabb_rect_collision(player_attack_hitbox, enemy_hurtbox) {
-                if enemy.health.hp > 0 {
-                    match enemy.health.knockback {
-                        Knockback::No => {
-                            enemy.health.hp -= 1;
-                            enemy.health.knockback = Knockback::Knocked{
-                                time_remaining: 1.0,
-                                just_hit: true,
-                            };
-                        },
-                        Knockback::Knocked {..} => (),
-                    }
+
+            if enemy.health.hp > 0
+                && aabb_collision(player_attack_hitbox, enemy_hurtbox)
+            {
+                match enemy.health.knockback {
+                    Knockback::No => {
+                        enemy.health.hp -= 1;
+                        enemy.health.knockback = Knockback::Knocked{
+                            time_remaining: 1.0,
+                            just_hit: true,
+                        };
+                    },
+                    Knockback::Knocked {..} => (),
                 }
             }
         }
@@ -180,13 +168,32 @@ fn playing(
         data.player_attack.health.hp = 1;
         data.player_attack.facing_direction = data.player.facing_direction;
         data.player_attack.pos = v2!(
-            data.player.pos.x + match data.player_attack.facing_direction {
+            data.player.pos.x + match data.player.facing_direction {
                 Direction::Right => 0.5,
                 Direction::Left => -0.5,
             },
             data.player.pos.y,
         );
         data.player_attack_prev_pos = data.player_attack.pos;
+    }
+
+    // player movement //////////////////////////////////////////////////////////
+    let player_command = {
+        let (left, right) = (
+            input.keyboard[A].is_down(),
+            input.keyboard[D].is_down(),
+        );
+        let dir = match (left, right) {
+            (false, true) => Some(Direction::Right),
+            (true, false) => Some(Direction::Left),
+            _             => None,
+        };
+        let jump = input.keyboard[K].pressed();
+        jmp_check = input.keyboard[K].is_down();
+        MovementCommand::Platformer { dir, jump }
+    };
+    if let MovementCommand::Platformer { dir: Some(dir), .. } = player_command {
+        data.player.facing_direction = dir;
     }
     data.player.mov(&data.tilemap, player_command, dt);
     
@@ -206,55 +213,57 @@ fn playing(
 
     // enemy movement //////////////////////////////////////////////////////
     for enemy in &mut data.enemies {
-        if enemy.health.hp > 0 {
-            let enemy_command = match enemy.health.knockback {
-                Knockback::No => {
-                    if distance_sq(enemy.pos, data.player.pos) >= 16.0 {
-                        let dir = if enemy.pos.x < data.player.pos.x {
-                            Some(Direction::Right)
-                        } else if enemy.pos.x > data.player.pos.x {
-                            Some(Direction::Left)
-                        } else {
-                            None
-                        };
-                        let jump = enemy.pos.y < data.player.pos.y;
-                        MovementCommand::Platformer { dir, jump }
-                    } else {
-                        MovementCommand::Inertia
-                    }
-                },
-                Knockback::Knocked { time_remaining, just_hit: true } => {
-                    enemy.health.knockback = Knockback::Knocked {
-                        time_remaining,
+        if enemy.health.hp <= 0 { continue }
+
+        let enemy_command = match enemy.health.knockback {
+            Knockback::No if distance_sq(enemy.pos, data.player.pos) >= 16.0 => {
+                let dir = if enemy.pos.x < data.player.pos.x {
+                    Some(Direction::Right)
+                } else if enemy.pos.x > data.player.pos.x {
+                    Some(Direction::Left)
+                } else {
+                    None
+                };
+                let jump = enemy.pos.y < data.player.pos.y;
+                MovementCommand::Platformer { dir, jump }
+            },
+            Knockback::No => {
+                MovementCommand::Velocity(V2::ZERO)
+            },
+            Knockback::Knocked { time_remaining, just_hit: true } => {
+                enemy.health.knockback = Knockback::Knocked {
+                    time_remaining,
+                    just_hit: false,
+                };
+
+                //TODO: velocity
+                let force = 100.0;
+                MovementCommand::Velocity(v2!(
+                    match enemy.facing_direction {
+                        Direction::Left => force,
+                        Direction::Right => -force,
+                    },
+                    force * 3.0,
+                ))
+            },
+            Knockback::Knocked { time_remaining, just_hit: false } => {
+                let new_time_remaining = time_remaining - dt;
+                enemy.health.knockback = if new_time_remaining <= 0.0 {
+                    Knockback::No
+                } else {
+                    Knockback::Knocked {
+                        time_remaining: new_time_remaining,
                         just_hit: false,
-                    };
-                    let force = 100.0;
-                    MovementCommand::Impulse(v2!(
-                        match enemy.facing_direction {
-                            Direction::Left => force,
-                            Direction::Right => -force,
-                        },
-                        force * 3.0,
-                    ))
-                },
-                Knockback::Knocked { time_remaining, just_hit: false } => {
-                    let new_time_remaining = time_remaining - dt;
-                    enemy.health.knockback = if new_time_remaining <= 0.0 {
-                        Knockback::No
-                    } else {
-                        Knockback::Knocked {
-                            time_remaining: new_time_remaining,
-                            just_hit: false,
-                        }
-                    };
-                    MovementCommand::Inertia
-                },
-            };
-            if let MovementCommand::Platformer { dir: Some(dir), .. } = enemy_command {
-                enemy.facing_direction = dir;
-            }
-            enemy.mov(&data.tilemap, enemy_command, input.dt);
+                    }
+                };
+
+                MovementCommand::Velocity(V2::ZERO)
+            },
+        };
+        if let MovementCommand::Platformer { dir: Some(dir), .. } = enemy_command {
+            enemy.facing_direction = dir;
         }
+        enemy.mov(&data.tilemap, enemy_command, input.dt);
     }
 
     ///////////////////////////////////////////////////////////////
@@ -276,10 +285,9 @@ fn playing(
         );
     }
 
-    ////////////////////////////////////////////////////////////////
-    /* draw */
-
+    // draw ////////////////////////////////////////////////////////
     render::clear(screen, Color::BLACK);
+
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
 
     let bmp = match data.player.facing_direction {
@@ -302,12 +310,13 @@ fn playing(
             Direction::Left => &data.enemy_bmp_left,
         };
         match enemy.health.knockback {
-            Knockback::Knocked { time_remaining, .. } if (time_remaining * 20.0).sin() > 0.0 => (),
+            Knockback::Knocked { time_remaining, .. }
+                if (time_remaining * 20.0).sin() > 0.0 => (),
             _ => enemy.draw(screen, bmp, data.camera_pos),
         }
     }
 
-    format!(" {}", data.player)
+    format!(" {}  ---   {}", data.player, if jmp_check { 'K' } else { '-' })
 }
 
 #[allow(clippy::useless_format)]
@@ -357,6 +366,7 @@ fn level_editor(
     }
 
     render::clear(screen, Color::BLACK);
+
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
 
     /* draw yellow outline */ {
@@ -454,7 +464,6 @@ impl Entity {
     }
 
     pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2) {
-        if self.health.hp <= 0 { return }
         let (x0, y0) = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
         render::draw_bmp(screen, bmp, (x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2));
     }
@@ -473,20 +482,9 @@ impl Entity {
             acc * dt
         }
 
-        let (V2 { x: mut dx, y: mut dy }, dvel) = match command {
-            MovementCommand::Inertia => {
-                match self.movement_state {
-                    MovementState::OnTheGround => {
-                        let acc = v2!(friction(self.vel.x), 0.0);
-                        (delta_position(acc, self.vel, dt), delta_velocity(acc, dt))
-                    },
-                    MovementState::InTheAir {..} => {
-                        (delta_position(GRAVITY, self.vel, dt), delta_velocity(GRAVITY, dt))
-                    },
-                }
-            },
-            MovementCommand::Impulse(acc) => {
-                (delta_position(acc, self.vel, dt), delta_velocity(acc, dt))
+        let (V2 { x: mut dx, y: mut dy }, new_vel) = match command {
+            MovementCommand::Velocity(vel) => {
+                (delta_position(V2::ZERO, self.vel, dt), -self.vel + vel)
             },
             MovementCommand::Platformer { dir, jump } => {
                 let base_acc_x = HORIZONTAL_ACC * match dir {
@@ -497,19 +495,20 @@ impl Entity {
                 match self.movement_state {
                     MovementState::OnTheGround => {
                         let acc_x = base_acc_x + friction(self.vel.x);
-                        let dvel = {
-                            let dvely = if jump {
+                        let new_vel = {
+                            let new_velx = self.vel.x + delta_velocity(acc_x, dt);
+                            let new_vely = if jump {
                                 self.movement_state = MovementState::InTheAir {
                                     jumped_again: false,
                                 };
-                                -self.vel.y + JUMP_VEL
+                                JUMP_VEL
                             } else {
-                                delta_velocity(GRAVITY.y, dt)
+                                self.vel.y + delta_velocity(GRAVITY.y, dt)
                             };
-                            v2!(delta_velocity(acc_x, dt), dvely)
+                            v2!(new_velx, new_vely)
                         };
                         let acc = v2!(acc_x, 0.0);
-                        (delta_position(acc, self.vel, dt), dvel)
+                        (delta_position(acc, self.vel, dt), new_vel)
                     },
                     MovementState::InTheAir { jumped_again: false } if jump => {
                         self.movement_state = MovementState::InTheAir {
@@ -531,12 +530,12 @@ impl Entity {
                             };
                             v2!(acc_x, GRAVITY.y)
                         };
-                        (delta_position(acc, self.vel, dt), delta_velocity(acc, dt))
+                        (delta_position(acc, self.vel, dt), self.vel + delta_velocity(acc, dt))
                     },
                 }
             },
         };
-        self.vel += dvel;
+        self.vel = new_vel;
         clamp(&mut self.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
         clamp(&mut self.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
 
@@ -563,10 +562,8 @@ impl Entity {
                     self.movement_state = MovementState::OnTheGround;
                     (tile_y + 1.0) - self.pos.y - self.size.bottom_offset * 1.01
                 }
-            } else {
-                if let MovementState::OnTheGround = self.movement_state {
-                    self.movement_state = MovementState::InTheAir { jumped_again: false };
-                }
+            } else if let MovementState::OnTheGround = self.movement_state {
+                self.movement_state = MovementState::InTheAir { jumped_again: false };
             }
         }
         self.pos.y += dy;
@@ -586,9 +583,8 @@ impl std::fmt::Display for Entity {
 }
 
 enum MovementCommand {
-    Inertia,
-    Impulse(V2),
-    Platformer{dir: Option<Direction>, jump: bool}
+    Velocity(V2),
+    Platformer { dir: Option<Direction>, jump: bool },
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -612,7 +608,7 @@ impl Rect2 {
     }
 }
 
-fn aabb_rect_collision(rect0: Rect2, rect1: Rect2) -> bool {
+fn aabb_collision(rect0: Rect2, rect1: Rect2) -> bool {
     rect0.right() > rect1.left() && rect0.left() < rect1.right()
         && rect0.top() > rect1.bottom() && rect0.bottom() < rect1.top()
 }
