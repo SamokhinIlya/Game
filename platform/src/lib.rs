@@ -3,6 +3,7 @@
 // when attributes on expressions gets stabilized this will be removed
 
 extern crate core;
+extern crate lazy_static;
 extern crate winapi;
 
 #[macro_use] pub mod debug;

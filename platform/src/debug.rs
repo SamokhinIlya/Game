@@ -38,11 +38,9 @@ pub fn panic_with_last_error_message(fn_name: &str) {
         unsafe { GetLastError() }
     );
 
-    //TODO: utf8_error handling
-    let error_message = unsafe { CStr::from_ptr(message_ptr) }
-        .to_str()
-        .unwrap_or_else(|_utf8_error| {
-            panic!("Error message from {} is not valid UTF-8", fn_name);
+    let error_message = unsafe { CStr::from_ptr(message_ptr) }.to_str()
+        .unwrap_or_else(|utf8_error| {
+            panic!("Error message from {} is not valid UTF-8. Error: {}", fn_name, utf8_error);
         });
     panic!("{}. Error: {}", fn_name, error_message);
 }

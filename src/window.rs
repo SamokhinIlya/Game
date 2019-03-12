@@ -37,7 +37,7 @@ impl Window {
             cbWndExtra: 0,
             hInstance: instance,
             hIcon: ptr::null_mut(),   //TODO: add icon
-            hCursor: ptr::null_mut(), //TODO: check if this works and add cursor later maybe
+            hCursor: ptr::null_mut(), //TODO: add cursor
             hbrBackground: ptr::null_mut(),
             lpszMenuName: ptr::null_mut(),
             lpszClassName: "main_window_class\0".as_ptr() as *const c_char,
@@ -88,7 +88,7 @@ impl Window {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: size_of::<BITMAPINFOHEADER>() as u32,
                 biWidth: width,
-                biHeight: -height, //NOTE: negative value suggests that bitmap is top-down
+                biHeight: -height, //NOTE: negative means that bitmap is top-down
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB,
@@ -144,7 +144,7 @@ impl Window {
                     monitor_info.rcMonitor.top,
                     fullscreen_window_width,
                     fullscreen_window_height,
-                    SWP_NOOWNERZORDER | SWP_FRAMECHANGED, //TODO: check other options and NOOWNERZORDER
+                    SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
                 )
             );
 
