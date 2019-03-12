@@ -14,24 +14,28 @@ use platform::{
     RawPtr,
 };
 use utils::*;
-use crate::render::Color;
-use crate::vector::{
-    V2,
-    distance_sq,
+use crate::{
+    render::Color,
+    vector::{
+        V2,
+        distance_sq,
+    },
+    tilemap::{
+        Tilemap,
+        Tile,
+        TILE_SIZE,
+        SCREEN_WIDTH_IN_TILES,
+        SCREEN_HEIGHT_IN_TILES,
+        screen_pos_to_tilemap_pos,
+        tilemap_pos_to_screen_pos,
+    },
+    bitmap::Bitmap,
+    file::{Load, write_to_file},
 };
-use crate::tilemap::{
-    Tilemap,
-    Tile,
-    TILE_SIZE,
-    SCREEN_WIDTH_IN_TILES,
-    SCREEN_HEIGHT_IN_TILES,
-    screen_pos_to_tilemap_pos,
-    tilemap_pos_to_screen_pos,
-};
-use crate::bitmap::Bitmap;
-use crate::file::{Load, write_to_file};
 
 /* TODO: ideas
+  - level editor
+  - move to ecs
   - visuals:
     - dust cloud when changing direction
     - generating vfx at runtime (particles)
@@ -74,7 +78,8 @@ struct PlayerBmps {
 pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
-        tilemap: Tilemap::load("data/levels/map_00").unwrap_or_else(|_| Tilemap::new()),
+        tilemap: Tilemap::load("data/levels/map_00")
+            .unwrap_or_else(|_| Tilemap::new()),
         camera_pos: v2!(0.0, 0.0),
         player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
 
