@@ -130,11 +130,10 @@ fn playing(
         data.state = GameState::LevelEditor;
         render::clear(screen, Color::BLACK);
     }
-    let jmp_check;
 
     // attack update ///////////////////////////////////////////////////////////////
     if data.player_attack.health.hp > 0 {
-        for enemy in &mut data.enemies {
+        for enemy in data.enemies.iter_mut().filter(|x| x.health.hp > 0) {
             let size = data.player_attack.size;
             let pos = data.player_attack.pos;
             let player_attack_hitbox = Rect2::from_bbox(
@@ -143,9 +142,7 @@ fn playing(
             );
             let enemy_hurtbox = Rect2::from_center_size(enemy.pos, enemy.size);
 
-            if enemy.health.hp > 0
-                && aabb_collision(player_attack_hitbox, enemy_hurtbox)
-            {
+            if aabb_collision(player_attack_hitbox, enemy_hurtbox) {
                 match enemy.health.knockback {
                     Knockback::No => {
                         enemy.health.hp -= 1;
@@ -189,7 +186,6 @@ fn playing(
             _             => None,
         };
         let jump = input.keyboard[K].pressed();
-        jmp_check = input.keyboard[K].is_down();
         MovementCommand::Platformer { dir, jump }
     };
     if let MovementCommand::Platformer { dir: Some(dir), .. } = player_command {
@@ -212,9 +208,7 @@ fn playing(
     }
 
     // enemy movement //////////////////////////////////////////////////////
-    for enemy in &mut data.enemies {
-        if enemy.health.hp <= 0 { continue }
-
+    for enemy in data.enemies.iter_mut().filter(|x| x.health.hp > 0) {
         let enemy_command = match enemy.health.knockback {
             Knockback::No if distance_sq(enemy.pos, data.player.pos) >= 16.0 => {
                 let dir = if enemy.pos.x < data.player.pos.x {
@@ -227,9 +221,7 @@ fn playing(
                 let jump = enemy.pos.y < data.player.pos.y;
                 MovementCommand::Platformer { dir, jump }
             },
-            Knockback::No => {
-                MovementCommand::Velocity(V2::ZERO)
-            },
+            Knockback::No => MovementCommand::Velocity(V2::ZERO),
             Knockback::Knocked { time_remaining, just_hit: true } => {
                 enemy.health.knockback = Knockback::Knocked {
                     time_remaining,
@@ -316,7 +308,7 @@ fn playing(
         }
     }
 
-    format!(" {}  ---   {}", data.player, if jmp_check { 'K' } else { '-' })
+    format!(" {}", data.player)
 }
 
 #[allow(clippy::useless_format)]
@@ -402,6 +394,7 @@ impl Size {
 }
 
 //TODO: Size -> Rect2
+#[derive(Copy, Clone, Debug)]
 struct Entity {
     pub pos: V2,
     pub vel: V2,
@@ -411,23 +404,25 @@ struct Entity {
     pub movement_state: MovementState,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum Direction {
     Left,
     Right,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum MovementState {
     OnTheGround,
     InTheAir { jumped_again: bool },
 }
 
+#[derive(Copy, Clone, Debug)]
 struct Health {
     hp: i32,
     knockback: Knockback,
 }
 
+#[derive(Copy, Clone, Debug)]
 enum Knockback {
     No,
     Knocked {
@@ -483,8 +478,8 @@ impl Entity {
         }
 
         let (V2 { x: mut dx, y: mut dy }, new_vel) = match command {
-            MovementCommand::Velocity(vel) => {
-                (delta_position(V2::ZERO, self.vel, dt), -self.vel + vel)
+            MovementCommand::Velocity(new_vel) => {
+                (delta_position(V2::ZERO, self.vel, dt), new_vel)
             },
             MovementCommand::Platformer { dir, jump } => {
                 let base_acc_x = HORIZONTAL_ACC * match dir {
@@ -515,12 +510,12 @@ impl Entity {
                             jumped_again: true,
                         };
                         let acc_x = base_acc_x;
-                        let dvel = v2!(
-                            delta_velocity(acc_x, dt),
-                            -self.vel.y + 0.75 * JUMP_VEL,
+                        let new_vel = v2!(
+                            self.vel.x + delta_velocity(acc_x, dt),
+                            0.75 * JUMP_VEL,
                         );
                         let acc = v2!(acc_x, 0.0);
-                        (delta_position(acc, self.vel, dt), dvel)
+                        (delta_position(acc, self.vel, dt), new_vel)
                     },
                     MovementState::InTheAir { .. } => {
                         let acc = {
@@ -535,9 +530,6 @@ impl Entity {
                 }
             },
         };
-        self.vel = new_vel;
-        clamp(&mut self.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
-        clamp(&mut self.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
 
         if dx != 0.0 {
             if let Some(tile_x) = h_tilemap_collision(self, tilemap, dx) {
@@ -567,6 +559,10 @@ impl Entity {
             }
         }
         self.pos.y += dy;
+
+        self.vel = new_vel;
+        clamp(&mut self.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
+        clamp(&mut self.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
     }
 }
 
@@ -582,6 +578,7 @@ impl std::fmt::Display for Entity {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 enum MovementCommand {
     Velocity(V2),
     Platformer { dir: Option<Direction>, jump: bool },
