@@ -1,15 +1,12 @@
 use core::mem;
 use winapi::um::profileapi::{QueryPerformanceCounter, QueryPerformanceFrequency};
 
-//TODO: consider lazy_static or sync::Once
-static mut PERFORMANCE_FREQUENCY: i64 = 0;
-
-pub fn init() {
-    unsafe {
+lazy_static::lazy_static! {
+    static ref PERFORMANCE_FREQUENCY: i64 = unsafe {
         let mut pf = mem::uninitialized();
         QueryPerformanceFrequency(&mut pf);
-        PERFORMANCE_FREQUENCY = *pf.QuadPart();
-    }
+        *pf.QuadPart()
+    };
 }
 
 pub struct Counter {
@@ -41,22 +38,21 @@ impl Counter {
 #[derive(Copy, Clone)]
 pub struct TicksElapsed(i64);
 
-//TODO: check precision of cast then divide vs divide then cast
 #[allow(dead_code)]
 impl TicksElapsed {
     pub fn as_secs(self) -> f64 {
-        self.0 as f64 / unsafe { PERFORMANCE_FREQUENCY } as f64
+        self.0 as f64 / unsafe { *PERFORMANCE_FREQUENCY } as f64
     }
 
     pub fn as_ms(self) -> f64 {
-        (self.0 * 1000) as f64 / unsafe { PERFORMANCE_FREQUENCY } as f64
+        (self.0 * 1000) as f64 / unsafe { *PERFORMANCE_FREQUENCY } as f64
     }
 
     pub fn as_micros(self) -> f64 {
-        (self.0 * 1_000_000) as f64 / unsafe { PERFORMANCE_FREQUENCY } as f64
+        (self.0 * 1_000_000) as f64 / unsafe { *PERFORMANCE_FREQUENCY } as f64
     }
 
     pub fn as_nanos(self) -> f64 {
-        (self.0 * 1_000_000_000) as f64 / unsafe { PERFORMANCE_FREQUENCY } as f64
+        (self.0 * 1_000_000_000) as f64 / unsafe { *PERFORMANCE_FREQUENCY } as f64
     }
 }

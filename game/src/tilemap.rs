@@ -1,4 +1,7 @@
-use std::{ptr, mem};
+use std::{
+    ptr,
+    mem,
+};
 use crate::render;
 use crate::vector::V2;
 use crate::bitmap::Bitmap;

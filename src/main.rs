@@ -4,7 +4,7 @@ use core::{mem, ptr};
 use platform::*;
 use winapi::{ctypes::*, um::winuser::*};
 
-/* TODO:
+/* TODO: what is missing
  - controller support
  - provide game a way to change window and rendering resolution
  - audio
@@ -12,7 +12,6 @@ use winapi::{ctypes::*, um::winuser::*};
 */
 
 fn main() {
-    time::init();
     let mut window = window::Window::with_dimensions(1920 / 2, 1080 / 2);
     let window_bmp = graphics::WindowBuffer::with_dimensions(window.width(), window.height());
     let mut input = input::Input::default();

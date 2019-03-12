@@ -31,7 +31,7 @@ use crate::tilemap::{
 use crate::bitmap::Bitmap;
 use crate::file::{Load, write_to_file};
 
-/* TODO:
+/* TODO: ideas
   - visuals:
     - dust cloud when changing direction
     - generating vfx at runtime (particles)
@@ -228,7 +228,6 @@ fn playing(
                     just_hit: false,
                 };
 
-                //TODO: velocity
                 let force = 100.0;
                 MovementCommand::Velocity(v2!(
                     match enemy.facing_direction {
@@ -438,7 +437,6 @@ impl Entity {
         Self {
             pos: v2!(1.5, 1.5),
             vel: v2!(0.0, 0.0),
-            //TODO: something about this
             size: Size {
                 top_offset:      0.5 - 1.0 / 9.0,
                 bottom_offset: -(0.5 - 0.001),
