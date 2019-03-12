@@ -54,66 +54,74 @@ pub fn clear(dst_bmp: &Bitmap, color: Color) {
     fill_rect(dst_bmp, (0, 0), dst_bmp.dim(), color);
 }
 
-pub fn render_font(font_data: &'static [u8]) -> Bitmap {
-    use rusttype::{point, FontCollection, PositionedGlyph, Scale};
+use std::collections::HashMap;
+use std::path::Path;
+use crate::file::Load;
 
-    let font = {
-        let collection = FontCollection::from_bytes(font_data).unwrap_or_else(|e| {
-            panic!("error constructing a FontCollection from bytes: {}", e);
-        });
+//TODO: if height is smaller that 20 letters are barely visible
+pub struct FontBitmaps {
+    characters: HashMap<char, Bitmap>,
+}
 
-        collection.into_font().unwrap_or_else(|e| {
-            panic!("error turning FontCollection into a Font: {}", e);
-        })
-    };
+impl Load for FontBitmaps {
+    fn load<P>(filepath: P) -> std::io::Result<Self>
+        where P: AsRef<Path>
+    {
+        use rusttype::{point, FontCollection, PositionedGlyph, Scale};
 
-    let height: f32 = 20.0;
-    let pixel_height = height.ceil() as usize;
-
-    let scale = Scale::uniform(height);
-
-    // The origin of a line of text is at the baseline (roughly where
-    // non-descending letters sit). We don't want to clip the text, so we shift
-    // it down with an offset when laying it out. v_metrics.ascent is the
-    // distance between the baseline and the highest edge of any glyph in
-    // the font. That's enough to guarantee that there's no clipping.
-    let v_metrics = font.v_metrics(scale);
-    let offset = point(0.0, v_metrics.ascent);
-
-    const ALL_SYMBOLS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGIJKLMNOPQRSTUVWXYZ0123456789-.,!?";
-    let glyphs: Vec<PositionedGlyph> = font.layout(ALL_SYMBOLS, scale, offset).collect();
-
-    // Find the most visually pleasing width to display
-    let width = glyphs
-        .iter()
-        .rev()
-        .map(|g| g.position().x as f32 + g.unpositioned().h_metrics().advance_width)
-        .next()
-        .unwrap_or(0.0)
-        .ceil() as usize;
-
-    println!("width: {}, height: {}", width, pixel_height);
-
-    let mut font_bmp = Bitmap::with_dimensions(width as i32, pixel_height as i32).filled(Color::BLACK);
-    for g in glyphs {
-        if let Some(bb) = g.pixel_bounding_box() {
-            g.draw(|x, y, v| {
-                let color = Color::rgb(v, v, v);
-                let x = x as i32 + bb.min.x;
-                let y = y as i32 + bb.min.y;
-                // There's still a possibility that the glyph clips the boundaries of the bitmap
-                if x >= 0 && x < width as i32
-                    && y >= 0 && y < pixel_height as i32
-                {
-                    let x = x as usize;
-                    let y = y as usize;
-                    font_bmp[(x, y)] = color.into();
-                }
+        let font = {
+            let file = crate::file::read_entire_file(filepath)?;
+            let collection = FontCollection::from_bytes(file).unwrap_or_else(|e| {
+                panic!("error constructing a FontCollection from bytes: {}", e);
+            });
+            collection.into_font().unwrap_or_else(|e| {
+                panic!("error turning FontCollection into a Font: {}", e);
             })
+        };
+
+        const CHAR_HEIGHT: i32 = 20;
+
+        let scale = Scale::uniform(CHAR_HEIGHT as f32);
+
+        // The origin of a line of text is at the baseline (roughly where
+        // non-descending letters sit). We don't want to clip the text, so we shift
+        // it down with an offset when laying it out. v_metrics.ascent is the
+        // distance between the baseline and the highest edge of any glyph in
+        // the font. That's enough to guarantee that there's no clipping.
+        let v_metrics = font.v_metrics(scale);
+        let offset = point(0.0, v_metrics.ascent);
+
+        const ALL_SYMBOLS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,!? ";
+        let glyphs: Vec<PositionedGlyph> = font.layout(ALL_SYMBOLS, scale, offset).collect();
+
+        let mut char_bitmaps = HashMap::new();
+        for (g, ch) in glyphs.iter().zip(ALL_SYMBOLS.chars()) {
+            if let Some(bbox) = g.pixel_bounding_box() {
+                let char_width = bbox.max.x - bbox.min.x;
+                let mut char_bmp = Bitmap::with_dimensions(char_width, CHAR_HEIGHT)
+                    .filled(Color::TRANSPARENT);
+                g.draw(|x, y, v| {
+                    let x = x as usize;
+                    let y = y as usize + (bbox.min.y as usize);
+                    char_bmp[(x, y)] = Color::argb(v, 1.0, 1.0, 1.0).into();
+                });
+                char_bitmaps.insert(ch, char_bmp);
+            }
+        }
+        char_bitmaps.insert(' ', Bitmap::with_dimensions(CHAR_HEIGHT / 2, CHAR_HEIGHT).filled(Color::TRANSPARENT));
+
+        Ok(FontBitmaps { characters: char_bitmaps })
+    }
+}
+
+impl FontBitmaps {
+    pub fn draw_string(&self, dst: &Bitmap, (mut x, y): (i32, i32), string: &str) {
+        for ref ch in string.chars() {
+            let bmp = self.characters.get(ch).expect(&format!("No bitmap for character: {}", ch));
+            draw_bmp(dst, bmp, (x, y));
+            x += bmp.width();
         }
     }
-
-    font_bmp
 }
 
 #[derive(Copy, Clone)]
@@ -139,6 +147,15 @@ impl Color {
             | (b * 255.0).round() as u32;
 
         Self { data }
+    }
+
+    pub fn argb(mut a: f32, r: f32, g: f32, b: f32) -> Self {
+        let mut color = Self::rgb(r, g, b);
+        clamp(&mut a, 0.0, 1.0);
+        let alpha = ((a * 255.0).round() as u32) << 24;
+        color.data &= !Self::A_MASK;
+        color.data |= alpha;
+        color
     }
 
     pub const A_MASK: u32 = 0xFF00_0000;
