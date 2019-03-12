@@ -130,7 +130,6 @@ fn playing(
         data.state = GameState::LevelEditor;
         render::clear(screen, Color::BLACK);
     }
-    let jmp_check;
 
     // attack update ///////////////////////////////////////////////////////////////
     if data.player_attack.health.hp > 0 {
@@ -189,7 +188,6 @@ fn playing(
             _             => None,
         };
         let jump = input.keyboard[K].pressed();
-        jmp_check = input.keyboard[K].is_down();
         MovementCommand::Platformer { dir, jump }
     };
     if let MovementCommand::Platformer { dir: Some(dir), .. } = player_command {
@@ -316,7 +314,7 @@ fn playing(
         }
     }
 
-    format!(" {}  ---   {}", data.player, if jmp_check { 'K' } else { '-' })
+    format!(" {}", data.player)
 }
 
 #[allow(clippy::useless_format)]
@@ -402,6 +400,7 @@ impl Size {
 }
 
 //TODO: Size -> Rect2
+#[derive(Copy, Clone, Debug)]
 struct Entity {
     pub pos: V2,
     pub vel: V2,
@@ -411,23 +410,25 @@ struct Entity {
     pub movement_state: MovementState,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum Direction {
     Left,
     Right,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum MovementState {
     OnTheGround,
     InTheAir { jumped_again: bool },
 }
 
+#[derive(Copy, Clone, Debug)]
 struct Health {
     hp: i32,
     knockback: Knockback,
 }
 
+#[derive(Copy, Clone, Debug)]
 enum Knockback {
     No,
     Knocked {
@@ -535,9 +536,6 @@ impl Entity {
                 }
             },
         };
-        self.vel = new_vel;
-        clamp(&mut self.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
-        clamp(&mut self.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
 
         if dx != 0.0 {
             if let Some(tile_x) = h_tilemap_collision(self, tilemap, dx) {
@@ -567,6 +565,10 @@ impl Entity {
             }
         }
         self.pos.y += dy;
+
+        self.vel = new_vel;
+        clamp(&mut self.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
+        clamp(&mut self.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
     }
 }
 
@@ -582,6 +584,7 @@ impl std::fmt::Display for Entity {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 enum MovementCommand {
     Velocity(V2),
     Platformer { dir: Option<Direction>, jump: bool },
