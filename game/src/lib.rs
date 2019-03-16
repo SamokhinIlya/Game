@@ -30,7 +30,7 @@ use crate::{
         tilemap_pos_to_screen_pos,
     },
     bitmap::Bitmap,
-    file::{Load, write_to_file},
+    file::{Load, Save},
 };
 
 /* TODO: ideas
@@ -79,7 +79,14 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
         tilemap: Tilemap::load("data/levels/map_00")
-            .unwrap_or_else(|_| Tilemap::new()),
+            .unwrap_or_else(|_| {
+                Tilemap::new(
+                    15,
+                    15,
+                    //SCREEN_WIDTH_IN_TILES.ceil() as i32,
+                    //SCREEN_HEIGHT_IN_TILES.ceil() as i32,
+                )
+            }),
         camera_pos: v2!(0.0, 0.0),
         player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
 
@@ -205,7 +212,7 @@ fn playing(
             Direction::Left => -0.5,
         };
         //TODO: kill projectile when out of sight
-        if let Some(_) = h_tilemap_collision(&data.player_attack, &data.tilemap, dx) {
+        if h_tilemap_collision(&data.player_attack, &data.tilemap, dx).is_some() {
             data.player_attack.health.hp = 0;
         } else {
             data.player_attack.pos.x += dx;
@@ -327,8 +334,10 @@ fn level_editor(
     }
 
     if input.keyboard[KBKey::S].pressed() && input.keyboard[KBKey::Ctrl].is_down() {
-        //TODO: trait for saving into file
-        write_to_file("data/levels/map_00", &data.tilemap).unwrap();
+        let save_result = data.tilemap.save("data/levels/map_00");
+        if save_result.is_err() {
+            data.font_bmp.draw_string(screen, (10, 10), "Error saving bitmap");
+        }
     }
 
     if !input.keyboard[KBKey::Ctrl].is_down() {
@@ -345,20 +354,21 @@ fn level_editor(
         }
     }
 
-    if input.mouse[MouseKey::LB].is_down() {
-        let tile_pos = screen_pos_to_tilemap_pos(
-            input.mouse.pos(),
-            data.camera_pos,
-            (screen.width(), screen.height()),
-        );
-        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Ground);
+    let maybe_tile = if input.mouse[MouseKey::LB].is_down() {
+        Some(Tile::Ground)
     } else if input.mouse[MouseKey::RB].is_down() {
+        Some(Tile::Empty)
+    } else {
+        None
+    };
+
+    if let Some(tile) = maybe_tile {
         let tile_pos = screen_pos_to_tilemap_pos(
             input.mouse.pos(),
             data.camera_pos,
             (screen.width(), screen.height()),
         );
-        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Empty);
+        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, tile);
     }
 
     render::clear(screen, Color::BLACK);

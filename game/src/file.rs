@@ -1,39 +1,42 @@
 use std::{
+    fs::File,
+    io::BufReader,
     marker::Sized,
-    path::Path,
 };
+
+pub use std::path::Path;
+pub use std::io::Result as IOResult;
 
 pub trait Load
     where Self: Sized
 {
-    fn load<P>(filepath: P) -> std::io::Result<Self>
+    fn load<P>(filepath: P) -> IOResult<Self>
         where P: AsRef<Path>;
 }
 
-pub fn read_entire_file<P>(filepath: P) -> std::io::Result<Vec<u8>>
+pub trait Save
+    where Self: Sized
+{
+    fn save<P>(&self, filepath: P) -> IOResult<()>
+        where P: AsRef<Path>;
+}
+
+pub fn read_entire_file<P>(filepath: P) -> IOResult<Vec<u8>>
     where P: AsRef<Path>
 {
-    use std::io::Read;
-
-    let f = std::fs::File::open(filepath)?;
+    let f = File::open(filepath)?;
     let mut v = Vec::new();
-    std::io::BufReader::new(f).read_to_end(&mut v)?;
+
+    use std::io::Read;
+    BufReader::new(f).read_to_end(&mut v)?;
 
     Ok(v)
 }
 
-pub fn write_to_file<P, T>(filepath: P, val: &T) -> std::io::Result<()>
-    where P: AsRef<Path>,
-          T: Sized
+pub fn write_bytes_to_file<P>(filepath: P, bytes: &[u8]) -> IOResult<()>
+    where P: AsRef<Path>
 {
+    //TODO: BufWrite?
     use std::io::Write;
-
-    let mut f = std::fs::File::create(filepath)?;
-    let s = unsafe {
-        std::slice::from_raw_parts(
-            val as *const _ as *const u8,
-            std::mem::size_of::<T>(),
-        )
-    };
-    f.write_all(s)
+    File::create(filepath)?.write_all(bytes)
 }

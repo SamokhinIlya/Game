@@ -207,6 +207,7 @@ impl Load for Bitmap {
 }
 
 impl From<platform::graphics::WindowBuffer> for Bitmap {
+    #[allow(clippy::cast_ptr_alignment)]
     fn from(window_buffer: platform::graphics::WindowBuffer) -> Self {
         Self {
             data: window_buffer.data as *mut u32,
