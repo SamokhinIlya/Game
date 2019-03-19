@@ -116,9 +116,8 @@ impl Load for FontBitmaps {
 
 impl FontBitmaps {
     pub fn draw_string(&self, dst: &Bitmap, (mut x, y): (i32, i32), string: &str) {
-        for ch in string.chars() {
-            let bmp = self.characters.get(&ch)
-                .unwrap_or_else(|| panic!("No bitmap for character: {}", ch));
+        for ref ch in string.chars() {
+            let bmp = self.characters.get(ch).expect(&format!("No bitmap for character: {}", ch));
             draw_bmp(dst, bmp, (x, y));
             x += bmp.width();
         }

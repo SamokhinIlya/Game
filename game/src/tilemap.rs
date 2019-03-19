@@ -1,15 +1,11 @@
 use std::{
     ptr,
-    mem::size_of,
+    mem,
 };
-use std::mem::uninitialized as uninit;
-use crate::{
-    render,
-    vector::V2,
-    bitmap::Bitmap,
-    //TODO: prelude?
-    file::*,
-};
+use crate::render;
+use crate::vector::V2;
+use crate::bitmap::Bitmap;
+use crate::file::{Load, read_entire_file};
 
 pub const TILE_SIZE: i32 = 64;
 //FIXME: these should be derived from TILE_SIZE and screen_size
@@ -20,9 +16,9 @@ pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.4375;
 
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: (i32, i32),
-    camera: V2<f32>,
+    camera: V2,
     screen: (i32, i32),
-) -> V2<f32> {
+) -> V2 {
     v2!(
         screen_pos.0 as f32 / TILE_SIZE as f32 + camera.x,
         (screen.1 - screen_pos.1) as f32 / TILE_SIZE as f32 + camera.y
@@ -30,8 +26,8 @@ pub fn screen_pos_to_tilemap_pos(
 }
 
 pub fn tilemap_pos_to_screen_pos(
-    tilemap_pos: V2<f32>,
-    camera: V2<f32>,
+    tilemap_pos: V2,
+    camera: V2,
     screen: (i32, i32),
 ) -> (i32, i32) {
     (
@@ -64,26 +60,29 @@ impl Tile {
     }
 }
 
+//TODO: variable size
+const TILEMAP_WIDTH: usize = 16 * 2;
+const TILEMAP_HEIGHT: usize = 9 * 2;
+
 #[derive(Clone)]
 pub struct Tilemap {
     pub width: i32,
     pub height: i32,
-    pub map: Vec<Tile>,
+    pub map: [[Tile; TILEMAP_WIDTH]; TILEMAP_HEIGHT],
 }
 
 impl Tilemap {
-    pub fn new(width: i32, height: i32) -> Self {
-        assert!(width > 0, height > 0);
+    pub fn new() -> Self {
         Self {
-            width,
-            height,
-            map: vec![Tile::Empty; (width * height) as usize],
+            width: TILEMAP_WIDTH as i32,
+            height: TILEMAP_HEIGHT as i32,
+            map: [ [Tile::Empty; TILEMAP_WIDTH]; TILEMAP_HEIGHT ],
         }
     }
 
     pub unsafe fn get_unchecked(&self, x: i32, y: i32) -> Tile {
-        debug_assert!(x >= 0 && x < self.width, y >= 0 && y < self.height);
-        *self.map.get_unchecked((y * self.width + x) as usize)
+        debug_assert!(x >= 0 && x < self.width && y >= 0 && y < self.height);
+        self.map[y as usize][x as usize]
     }
 
     pub fn get(&self, x: i32, y: i32) -> Option<Tile> {
@@ -95,8 +94,8 @@ impl Tilemap {
     }
 
     pub unsafe fn set_unchecked(&mut self, x: i32, y: i32, tile: Tile) {
-        debug_assert!(x >= 0 && x < self.width, y >= 0 && y < self.height);
-        *self.map.get_unchecked_mut((y * self.width + x) as usize) = tile;
+        debug_assert!(x >= 0 && x < self.width && y >= 0 && y < self.height);
+        self.map[y as usize][x as usize] = tile;
     }
 
     pub fn set(&mut self, x: i32, y: i32, tile: Tile) -> Result<(), ()> {
@@ -112,7 +111,7 @@ impl Tilemap {
         &self,
         dst_bmp: &Bitmap,
         tile_bitmaps: &[Bitmap],
-        camera: V2<f32>,
+        camera: V2,
     ) {
         for y in 0..=V_DRAW_TILES {
             let tile_y = camera.y.trunc() as i32 + y;
@@ -142,73 +141,21 @@ impl Tilemap {
     }
 }
 
-/// For saving/loading to/from file
-#[repr(packed)]
-#[derive(Copy, Clone)]
-struct TilemapSize {
-    width: u32,
-    height: u32,
-}
-
 impl Load for Tilemap {
-    fn load<P>(filepath: P) -> IOResult<Self>
-        where P: AsRef<Path>
-    {
+    fn load<P: AsRef<std::path::Path>>(filepath: P) -> std::io::Result<Self> {
         let file = read_entire_file(filepath)?;
-
-        #[allow(clippy::cast_ptr_alignment)]
-        let TilemapSize { width, height } = unsafe {
-            *(&file[..size_of::<TilemapSize>()] as *const _ as *const TilemapSize)
-        };
-        let tilemap_size = (width * height) as usize;
-
-        let mut map = Vec::<Tile>::with_capacity(tilemap_size);
-        map.resize_with(tilemap_size, || unsafe { uninit() });
-
-        let map_bytes = unsafe {
-            std::slice::from_raw_parts_mut(
-                map.as_mut_ptr() as *mut u8,
-                tilemap_size * size_of::<Tile>()
-            )
-        };
-        map_bytes.copy_from_slice(&file[size_of::<TilemapSize>()..]);
-
-        Ok(Self {
-            width: width as i32,
-            height: width as i32,
-            map,
-        })
-    }
-}
-
-impl Save for Tilemap {
-    fn save<P>(&self, filepath: P) -> IOResult<()>
-        where P: AsRef<Path>
-    {
-        let to_file = {
-            let tilemap_size = TilemapSize {
-                width: self.width as u32,
-                height: self.height as u32,
+        if file.len() == mem::size_of::<Self>() {
+            #[allow(clippy::cast_ptr_alignment)]
+            let tilemap = unsafe {
+                ptr::read_unaligned(file.as_ptr() as *const Self)
             };
-            let tilemap_size_bytes = unsafe {
-                std::slice::from_raw_parts(
-                    &tilemap_size as *const _ as *const u8,
-                    size_of::<TilemapSize>(),
-                )
-            };
-            let tilemap_bytes = unsafe {
-                &*(self.map.as_slice() as *const _ as *const [u8])
-            };
-            let filesize = size_of::<TilemapSize>() + self.map.len() / size_of::<Tile>();
 
-            let mut bytes = Vec::<u8>::with_capacity(filesize);
-            bytes.resize_with(filesize, || unsafe { uninit() });
+            Ok(tilemap)
+        } else {
+            use std::io::{Error, ErrorKind};
 
-            bytes[..size_of::<TilemapSize>()].copy_from_slice(tilemap_size_bytes);
-            bytes[size_of::<TilemapSize>()..].copy_from_slice(tilemap_bytes);
-            bytes
-        };
-        write_bytes_to_file(filepath, to_file.as_slice())
+            Err(Error::new(ErrorKind::InvalidInput, ""))
+        }
     }
 }
 
