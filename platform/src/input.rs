@@ -333,6 +333,6 @@ impl KBKey {
             Quote,
         ];
 
-        VARIANTS.into_iter()
+        VARIANTS.iter()
     }
 }

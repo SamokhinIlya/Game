@@ -30,7 +30,7 @@ use crate::{
         tilemap_pos_to_screen_pos,
     },
     bitmap::Bitmap,
-    file::{Load, write_to_file},
+    file::{Load, Save},
 };
 
 /* TODO: ideas
@@ -50,13 +50,13 @@ struct GameData {
     pub state: GameState,
 
     pub tilemap: Tilemap,
-    pub camera_pos: V2,
+    pub camera_pos: V2<f32>,
 
     pub player: Entity,
 
     pub player_attack: Entity,
     pub player_attack_counter: f32,
-    pub player_attack_prev_pos: V2,
+    pub player_attack_prev_pos: V2<f32>,
 
     pub enemies: [Entity; 1],
 
@@ -79,13 +79,20 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
         tilemap: Tilemap::load("data/levels/map_00")
-            .unwrap_or_else(|_| Tilemap::new()),
+            .unwrap_or_else(|_| {
+                Tilemap::new(
+                    15,
+                    15,
+                    //SCREEN_WIDTH_IN_TILES.ceil() as i32,
+                    //SCREEN_HEIGHT_IN_TILES.ceil() as i32,
+                )
+            }),
         camera_pos: v2!(0.0, 0.0),
         player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
 
-        player_attack: Entity::with_pos_health(V2::ZERO, 0),
+        player_attack: Entity::with_pos_health(v2!(0.0, 0.0), 0),
         player_attack_counter: 0.0,
-        player_attack_prev_pos: V2::ZERO,
+        player_attack_prev_pos: v2!(0.0, 0.0),
 
         enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 5); 1],
         tile_bitmaps: [Bitmap::load("data/sprites/size_64/test_tile.bmp").unwrap(); 1],
@@ -205,7 +212,7 @@ fn playing(
             Direction::Left => -0.5,
         };
         //TODO: kill projectile when out of sight
-        if let Some(_) = h_tilemap_collision(&data.player_attack, &data.tilemap, dx) {
+        if h_tilemap_collision(&data.player_attack, &data.tilemap, dx).is_some() {
             data.player_attack.health.hp = 0;
         } else {
             data.player_attack.pos.x += dx;
@@ -226,7 +233,7 @@ fn playing(
                 let jump = enemy.pos.y < data.player.pos.y;
                 MovementCommand::Platformer { dir, jump }
             },
-            Knockback::No => MovementCommand::Velocity(V2::ZERO),
+            Knockback::No => MovementCommand::Velocity(v2!(0.0, 0.0)),
             Knockback::Knocked { time_remaining, just_hit: true } => {
                 enemy.health.knockback = Knockback::Knocked {
                     time_remaining,
@@ -253,7 +260,7 @@ fn playing(
                     }
                 };
 
-                MovementCommand::Velocity(V2::ZERO)
+                MovementCommand::Velocity(v2!(0.0, 0.0))
             },
         };
         if let MovementCommand::Platformer { dir: Some(dir), .. } = enemy_command {
@@ -327,8 +334,10 @@ fn level_editor(
     }
 
     if input.keyboard[KBKey::S].pressed() && input.keyboard[KBKey::Ctrl].is_down() {
-        //TODO: trait for saving into file
-        write_to_file("data/levels/map_00", &data.tilemap).unwrap();
+        let save_result = data.tilemap.save("data/levels/map_00");
+        if save_result.is_err() {
+            data.font_bmp.draw_string(screen, (10, 10), "Error saving bitmap");
+        }
     }
 
     if !input.keyboard[KBKey::Ctrl].is_down() {
@@ -345,20 +354,21 @@ fn level_editor(
         }
     }
 
-    if input.mouse[MouseKey::LB].is_down() {
-        let tile_pos = screen_pos_to_tilemap_pos(
-            input.mouse.pos(),
-            data.camera_pos,
-            (screen.width(), screen.height()),
-        );
-        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Ground);
+    let maybe_tile = if input.mouse[MouseKey::LB].is_down() {
+        Some(Tile::Ground)
     } else if input.mouse[MouseKey::RB].is_down() {
+        Some(Tile::Empty)
+    } else {
+        None
+    };
+
+    if let Some(tile) = maybe_tile {
         let tile_pos = screen_pos_to_tilemap_pos(
             input.mouse.pos(),
             data.camera_pos,
             (screen.width(), screen.height()),
         );
-        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, Tile::Empty);
+        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, tile);
     }
 
     render::clear(screen, Color::BLACK);
@@ -387,7 +397,7 @@ struct Size {
 }
 
 impl Size {
-    pub fn with_symmetric_offset(offset: V2) -> Self {
+    pub fn with_symmetric_offset(offset: V2<f32>) -> Self {
         Self {
             top_offset: offset.y,
             bottom_offset: -offset.y,
@@ -400,8 +410,8 @@ impl Size {
 //TODO: Size -> Rect2
 #[derive(Copy, Clone, Debug)]
 struct Entity {
-    pub pos: V2,
-    pub vel: V2,
+    pub pos: V2<f32>,
+    pub vel: V2<f32>,
     pub size: Size,
     pub facing_direction: Direction,
     pub health: Health,
@@ -436,7 +446,7 @@ enum Knockback {
 }
 
 impl Entity {
-    const MAX_VELOCITY: V2 = v2!(6.0, 13.0);
+    const MAX_VELOCITY: V2<f32> = v2!(6.0, 13.0);
 
     pub fn new() -> Self {
         Self {
@@ -454,14 +464,14 @@ impl Entity {
         }
     }
 
-    pub fn with_pos_health(pos: V2, hp: i32) -> Self {
+    pub fn with_pos_health(pos: V2<f32>, hp: i32) -> Self {
         let mut entity = Self::new();
         entity.pos = pos;
         entity.health.hp = hp;
         entity
     }
 
-    pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2) {
+    pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2<f32>) {
         let (x0, y0) = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
         render::draw_bmp(screen, bmp, (x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2));
     }
@@ -470,19 +480,21 @@ impl Entity {
     pub fn mov(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
         use std::ops::Mul;
 
+        //FIXME: guy sticks to ceiling while jumping
+
         const HORIZONTAL_ACC: f32 = 50.0;
         const JUMP_VEL: f32 = 40.0;
-        const GRAVITY: V2 = v2!(0.0, -50.0);
+        const GRAVITY: V2<f32> = v2!(0.0, -50.0);
 
         fn friction(vel: f32) -> f32 { vel * -8.0 }
-        fn delta_position(acc: V2, vel: V2, dt: f32) -> V2 { 0.5 * acc * dt*dt + vel * dt }
+        fn delta_position(acc: V2<f32>, vel: V2<f32>, dt: f32) -> V2<f32> { 0.5 * acc * dt*dt + vel * dt }
         fn delta_velocity<T>(acc: T, dt: f32) -> T where T: Mul<f32, Output=T> {
             acc * dt
         }
 
         let (V2 { x: mut dx, y: mut dy }, new_vel) = match command {
             MovementCommand::Velocity(new_vel) => {
-                (delta_position(V2::ZERO, self.vel, dt), new_vel)
+                (delta_position(v2!(0.0, 0.0), self.vel, dt), new_vel)
             },
             MovementCommand::Platformer { dir, jump } => {
                 let base_acc_x = HORIZONTAL_ACC * match dir {
@@ -583,12 +595,12 @@ impl std::fmt::Display for Entity {
 
 #[derive(Copy, Clone, Debug)]
 enum MovementCommand {
-    Velocity(V2),
+    Velocity(V2<f32>),
     Platformer { dir: Option<Direction>, jump: bool },
 }
 
 #[derive(Copy, Clone, Debug)]
-struct Rect2(V2, V2);
+struct Rect2(V2<f32>, V2<f32>);
 
 impl Rect2 {
     #[inline(always)] pub fn right(self)  -> f32 { self.1.x }
@@ -596,11 +608,11 @@ impl Rect2 {
     #[inline(always)] pub fn top(self)    -> f32 { self.1.y }
     #[inline(always)] pub fn bottom(self) -> f32 { self.0.y }
     
-    pub fn from_bbox(bottom_left: V2, top_right: V2) -> Self {
+    pub fn from_bbox(bottom_left: V2<f32>, top_right: V2<f32>) -> Self {
         Self(bottom_left, top_right)
     }
 
-    pub fn from_center_size(center: V2, size: Size) -> Self {
+    pub fn from_center_size(center: V2<f32>, size: Size) -> Self {
         Self(
             v2!(center.x + size.left_offset, center.y + size.bottom_offset),
             v2!(center.x + size.right_offset, center.y + size.top_offset),
