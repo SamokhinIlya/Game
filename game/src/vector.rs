@@ -40,10 +40,16 @@ impl<T: Num32> V2<T> {
     }
 }
 
+impl<T: Num32> From<(T, T)> for V2<T> {
+    fn from((x, y): (T, T)) -> Self {
+        v2!(x, y)
+    }
+}
+
 impl<T: Num32> Add for V2<T> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        V2::new(self.x + rhs.x, self.y + rhs.y)
+        v2!(self.x + rhs.x, self.y + rhs.y)
     }
 }
 

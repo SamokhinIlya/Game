@@ -374,6 +374,7 @@ fn level_editor(
     render::clear(screen, Color::BLACK);
 
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
+    data.tilemap.draw_outline(screen, data.camera_pos);
 
     /* draw yellow outline */ {
         let thickness = 4;

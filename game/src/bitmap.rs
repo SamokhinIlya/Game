@@ -7,6 +7,7 @@ use std::{
 };
 use crate::file::{Load, read_entire_file};
 
+#[derive(Debug)]
 pub struct Bitmap {
     data: *mut u32,
     width: i32,
@@ -22,19 +23,19 @@ impl Drop for Bitmap {
     }
 }
 
-impl Index<(usize, usize)> for Bitmap {
+impl Index<(i32, i32)> for Bitmap {
     type Output = u32;
-    fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+    fn index(&self, (x, y): (i32, i32)) -> &Self::Output {
         unsafe {
-            &*self.data.add(y * self.width as usize + x)
+            &*self.data.add((y * self.width + x) as usize)
         }
     }
 }
 
-impl IndexMut<(usize, usize)> for Bitmap {
-    fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut u32 {
+impl IndexMut<(i32, i32)> for Bitmap {
+    fn index_mut(&mut self, (x, y): (i32, i32)) -> &mut u32 {
         unsafe {
-            &mut *self.data.add(y * self.width as usize + x)
+            &mut *self.data.add((y * self.width + x) as usize)
         }
     }
 }

@@ -1,5 +1,6 @@
 use utils::clamp;
 use crate::bitmap::Bitmap;
+use crate::vector::V2i;
 
 pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color) {
     for row in dst_bmp.clamped_view(p0, p1) {
@@ -9,12 +10,65 @@ pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color)
     }
 }
 
+//TODO: thickness
+pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, thickness: u8, color: Color) {
+    let draw_left = min.x >= 0;
+    let draw_top = min.y >= 0;
+    let draw_right = max.x < dst.width();
+    let draw_bottom = max.y < dst.height();
+
+    if draw_left && draw_top && draw_right && draw_bottom {
+        for x in min.x..max.x {
+            dst[(x, min.y)] = color.into();
+            dst[(x, max.y)] = color.into();
+        }
+        for y in (min.y + 1)..max.y {
+            dst[(min.x    , y)] = color.into();
+            dst[(max.x - 1, y)] = color.into();
+        }
+    } else {
+        if !draw_left {
+            min.x = 0;
+        }
+        if !draw_top {
+            min.y = 0;
+        }
+        if !draw_right {
+            max.x = dst.width();
+        }
+        if !draw_bottom {
+            max.y = dst.height();
+        }
+
+        if draw_left {
+            for y in (min.y + 1)..max.y {
+                dst[(min.x    , y)] = color.into();
+            }
+        }
+        if draw_top {
+            for x in min.x..max.x {
+                dst[(x, min.y)] = color.into();
+            }
+        }
+        if draw_right {
+            for y in (min.y + 1)..max.y {
+                dst[(max.x - 1, y)] = color.into();
+            }
+        }
+        if draw_bottom {
+            for x in min.x..max.x {
+                dst[(x, max.y)] = color.into();
+            }
+        }
+    }
+}
+
 pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
     let src0 = (
         if p.0 < 0 { -p.0 } else { 0 },
         if p.1 < 0 { -p.1 } else { 0 },
     );
-    let src1 = (src_bmp.width(), src_bmp.height());
+    let src1 = src_bmp.dim();
 
     let dst0 = p;
     let dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);
@@ -101,8 +155,8 @@ impl Load for FontBitmaps {
                 let mut char_bmp = Bitmap::with_dimensions(char_width, CHAR_HEIGHT)
                     .filled(Color::TRANSPARENT);
                 g.draw(|x, y, v| {
-                    let x = x as usize;
-                    let y = y as usize + (bbox.min.y as usize);
+                    let x = x as i32;
+                    let y = y as i32 + (bbox.min.y as i32);
                     char_bmp[(x, y)] = Color::argb(v, 1.0, 1.0, 1.0).into();
                 });
                 char_bitmaps.insert(ch, char_bmp);

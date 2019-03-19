@@ -18,6 +18,7 @@ pub const V_DRAW_TILES: i32 = 9;
 pub const SCREEN_WIDTH_IN_TILES: f32 = 15.0;
 pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.4375;
 
+//TODO: (i32, i32) to V2i
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: (i32, i32),
     camera: V2f,
@@ -139,6 +140,21 @@ impl Tilemap {
                 render::draw_bmp(dst_bmp, tile_bmp, (x0, y0 - TILE_SIZE));
             }
         }
+    }
+
+    pub fn draw_outline(&self, dst: &mut Bitmap, camera: V2f) {
+        let min: V2i = tilemap_pos_to_screen_pos(
+            v2!(0.0, self.height as f32),
+            camera,
+            dst.dim(),
+        ).into();
+        let max: V2i = tilemap_pos_to_screen_pos(
+            v2!(self.width as f32, 0.0),
+            camera,
+            dst.dim(),
+        ).into();
+        let thickness = 1;
+        render::draw_rect(dst, min, max, thickness, render::Color::YELLOW);
     }
 }
 
