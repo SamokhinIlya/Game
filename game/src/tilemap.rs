@@ -20,9 +20,9 @@ pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.4375;
 
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: (i32, i32),
-    camera: V2,
+    camera: V2<f32>,
     screen: (i32, i32),
-) -> V2 {
+) -> V2<f32> {
     v2!(
         screen_pos.0 as f32 / TILE_SIZE as f32 + camera.x,
         (screen.1 - screen_pos.1) as f32 / TILE_SIZE as f32 + camera.y
@@ -30,8 +30,8 @@ pub fn screen_pos_to_tilemap_pos(
 }
 
 pub fn tilemap_pos_to_screen_pos(
-    tilemap_pos: V2,
-    camera: V2,
+    tilemap_pos: V2<f32>,
+    camera: V2<f32>,
     screen: (i32, i32),
 ) -> (i32, i32) {
     (
@@ -112,7 +112,7 @@ impl Tilemap {
         &self,
         dst_bmp: &Bitmap,
         tile_bitmaps: &[Bitmap],
-        camera: V2,
+        camera: V2<f32>,
     ) {
         for y in 0..=V_DRAW_TILES {
             let tile_y = camera.y.trunc() as i32 + y;
