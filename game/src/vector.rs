@@ -25,6 +25,9 @@ pub struct V2<T: Num32> {
     pub y: T,
 }
 
+pub type V2i = V2<i32>;
+pub type V2f = V2<f32>;
+
 macro_rules! v2 {
     ($x:expr, $y:expr$(,)*) => {
         V2 { x: $x, y: $y }
@@ -101,7 +104,7 @@ pub fn distance_sq<T: Num32>(lhs: V2<T>, rhs: V2<T>) -> T {
 }
 
 use std::fmt;
-impl fmt::Display for V2<f32> {
+impl fmt::Display for V2f {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "V2({:.2}, {:.2})", self.x, self.y)
     }

@@ -5,7 +5,7 @@ use std::{
 use std::mem::uninitialized as uninit;
 use crate::{
     render,
-    vector::V2,
+    vector::{V2, V2f, V2i},
     bitmap::Bitmap,
     //TODO: prelude?
     file::*,
@@ -20,9 +20,9 @@ pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.4375;
 
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: (i32, i32),
-    camera: V2<f32>,
+    camera: V2f,
     screen: (i32, i32),
-) -> V2<f32> {
+) -> V2f {
     v2!(
         screen_pos.0 as f32 / TILE_SIZE as f32 + camera.x,
         (screen.1 - screen_pos.1) as f32 / TILE_SIZE as f32 + camera.y
@@ -30,8 +30,8 @@ pub fn screen_pos_to_tilemap_pos(
 }
 
 pub fn tilemap_pos_to_screen_pos(
-    tilemap_pos: V2<f32>,
-    camera: V2<f32>,
+    tilemap_pos: V2f,
+    camera: V2f,
     screen: (i32, i32),
 ) -> (i32, i32) {
     (
@@ -112,7 +112,7 @@ impl Tilemap {
         &self,
         dst_bmp: &Bitmap,
         tile_bitmaps: &[Bitmap],
-        camera: V2<f32>,
+        camera: V2f,
     ) {
         for y in 0..=V_DRAW_TILES {
             let tile_y = camera.y.trunc() as i32 + y;
@@ -143,15 +143,15 @@ impl Tilemap {
 }
 
 /// For saving/loading to/from file
-#[repr(packed)]
 #[derive(Copy, Clone)]
+#[repr(packed)]
 struct TilemapSize {
     width: u32,
     height: u32,
 }
 
 impl Load for Tilemap {
-    fn load<P>(filepath: P) -> IOResult<Self>
+    fn load<P>(filepath: P) -> io::Result<Self>
         where P: AsRef<Path>
     {
         let file = read_entire_file(filepath)?;
@@ -182,7 +182,7 @@ impl Load for Tilemap {
 }
 
 impl Save for Tilemap {
-    fn save<P>(&self, filepath: P) -> IOResult<()>
+    fn save<P>(&self, filepath: P) -> io::Result<()>
         where P: AsRef<Path>
     {
         let to_file = {

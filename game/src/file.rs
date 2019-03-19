@@ -5,23 +5,23 @@ use std::{
 };
 
 pub use std::path::Path;
-pub use std::io::Result as IOResult;
+pub use std::io;
 
 pub trait Load
     where Self: Sized
 {
-    fn load<P>(filepath: P) -> IOResult<Self>
+    fn load<P>(filepath: P) -> io::Result<Self>
         where P: AsRef<Path>;
 }
 
 pub trait Save
     where Self: Sized
 {
-    fn save<P>(&self, filepath: P) -> IOResult<()>
+    fn save<P>(&self, filepath: P) -> io::Result<()>
         where P: AsRef<Path>;
 }
 
-pub fn read_entire_file<P>(filepath: P) -> IOResult<Vec<u8>>
+pub fn read_entire_file<P>(filepath: P) -> io::Result<Vec<u8>>
     where P: AsRef<Path>
 {
     let f = File::open(filepath)?;
@@ -33,7 +33,7 @@ pub fn read_entire_file<P>(filepath: P) -> IOResult<Vec<u8>>
     Ok(v)
 }
 
-pub fn write_bytes_to_file<P>(filepath: P, bytes: &[u8]) -> IOResult<()>
+pub fn write_bytes_to_file<P>(filepath: P, bytes: &[u8]) -> io::Result<()>
     where P: AsRef<Path>
 {
     //TODO: BufWrite?

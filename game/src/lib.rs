@@ -17,7 +17,7 @@ use utils::*;
 use crate::{
     render::Color,
     vector::{
-        V2,
+        V2, V2f, V2i,
         distance_sq,
     },
     tilemap::{
@@ -50,13 +50,13 @@ struct GameData {
     pub state: GameState,
 
     pub tilemap: Tilemap,
-    pub camera_pos: V2<f32>,
+    pub camera_pos: V2f,
 
     pub player: Entity,
 
     pub player_attack: Entity,
     pub player_attack_counter: f32,
-    pub player_attack_prev_pos: V2<f32>,
+    pub player_attack_prev_pos: V2f,
 
     pub enemies: [Entity; 1],
 
@@ -397,7 +397,7 @@ struct Size {
 }
 
 impl Size {
-    pub fn with_symmetric_offset(offset: V2<f32>) -> Self {
+    pub fn with_symmetric_offset(offset: V2f) -> Self {
         Self {
             top_offset: offset.y,
             bottom_offset: -offset.y,
@@ -410,8 +410,8 @@ impl Size {
 //TODO: Size -> Rect2
 #[derive(Copy, Clone, Debug)]
 struct Entity {
-    pub pos: V2<f32>,
-    pub vel: V2<f32>,
+    pub pos: V2f,
+    pub vel: V2f,
     pub size: Size,
     pub facing_direction: Direction,
     pub health: Health,
@@ -446,7 +446,7 @@ enum Knockback {
 }
 
 impl Entity {
-    const MAX_VELOCITY: V2<f32> = v2!(6.0, 13.0);
+    const MAX_VELOCITY: V2f = v2!(6.0, 13.0);
 
     pub fn new() -> Self {
         Self {
@@ -464,14 +464,14 @@ impl Entity {
         }
     }
 
-    pub fn with_pos_health(pos: V2<f32>, hp: i32) -> Self {
+    pub fn with_pos_health(pos: V2f, hp: i32) -> Self {
         let mut entity = Self::new();
         entity.pos = pos;
         entity.health.hp = hp;
         entity
     }
 
-    pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2<f32>) {
+    pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2f) {
         let (x0, y0) = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
         render::draw_bmp(screen, bmp, (x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2));
     }
@@ -484,10 +484,10 @@ impl Entity {
 
         const HORIZONTAL_ACC: f32 = 50.0;
         const JUMP_VEL: f32 = 40.0;
-        const GRAVITY: V2<f32> = v2!(0.0, -50.0);
+        const GRAVITY: V2f = v2!(0.0, -50.0);
 
         fn friction(vel: f32) -> f32 { vel * -8.0 }
-        fn delta_position(acc: V2<f32>, vel: V2<f32>, dt: f32) -> V2<f32> { 0.5 * acc * dt*dt + vel * dt }
+        fn delta_position(acc: V2f, vel: V2f, dt: f32) -> V2f { 0.5 * acc * dt*dt + vel * dt }
         fn delta_velocity<T>(acc: T, dt: f32) -> T where T: Mul<f32, Output=T> {
             acc * dt
         }
@@ -595,12 +595,12 @@ impl std::fmt::Display for Entity {
 
 #[derive(Copy, Clone, Debug)]
 enum MovementCommand {
-    Velocity(V2<f32>),
+    Velocity(V2f),
     Platformer { dir: Option<Direction>, jump: bool },
 }
 
 #[derive(Copy, Clone, Debug)]
-struct Rect2(V2<f32>, V2<f32>);
+struct Rect2(V2f, V2f);
 
 impl Rect2 {
     #[inline(always)] pub fn right(self)  -> f32 { self.1.x }
@@ -608,11 +608,11 @@ impl Rect2 {
     #[inline(always)] pub fn top(self)    -> f32 { self.1.y }
     #[inline(always)] pub fn bottom(self) -> f32 { self.0.y }
     
-    pub fn from_bbox(bottom_left: V2<f32>, top_right: V2<f32>) -> Self {
+    pub fn from_bbox(bottom_left: V2f, top_right: V2f) -> Self {
         Self(bottom_left, top_right)
     }
 
-    pub fn from_center_size(center: V2<f32>, size: Size) -> Self {
+    pub fn from_center_size(center: V2f, size: Size) -> Self {
         Self(
             v2!(center.x + size.left_offset, center.y + size.bottom_offset),
             v2!(center.x + size.right_offset, center.y + size.top_offset),
