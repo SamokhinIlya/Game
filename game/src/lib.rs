@@ -492,7 +492,7 @@ impl Entity {
             acc * dt
         }
 
-        let (V2 { x: mut dx, y: mut dy }, new_vel) = match command {
+        let (V2 { x: mut dx, y: mut dy }, mut new_vel) = match command {
             MovementCommand::Velocity(new_vel) => {
                 (delta_position(v2!(0.0, 0.0), self.vel, dt), new_vel)
             },
@@ -547,9 +547,8 @@ impl Entity {
         };
 
         if dx != 0.0 {
-            if let Some(tile_x) = h_tilemap_collision(self, tilemap, dx) {
-                let tile_x = tile_x as f32;
-                self.vel.x = 0.0;
+            if let Some(tile_x) = h_tilemap_collision(self, tilemap, dx).map(|x| x as f32) {
+                new_vel.x = 0.0;
                 dx = if dx > 0.0 {
                     tile_x         - self.pos.x - self.size.right_offset * 1.01
                 } else {
@@ -560,9 +559,8 @@ impl Entity {
         self.pos.x += dx;
 
         if dy != 0.0 {
-            if let Some(tile_y) = v_tilemap_collision(self, tilemap, dy) {
-                let tile_y = tile_y as f32;
-                self.vel.y = 0.0;
+            if let Some(tile_y) = v_tilemap_collision(self, tilemap, dy).map(|y| y as f32) {
+                new_vel.y = 0.0;
                 dy = if dy > 0.0 {
                     tile_y         - self.pos.y - self.size.top_offset    * 1.01
                 } else {
@@ -588,8 +586,11 @@ impl std::fmt::Display for Entity {
             MovementState::InTheAir { jumped_again: false } => "-",
             MovementState::InTheAir { jumped_again: true } => "^",
         };
-        write!(f, "pos: ({:>+5.2}, {:>+5.2}), vel: ({:>+5.2}, {:>+5.2}) |{}|",
-               self.pos.x, self.pos.y, self.vel.x, self.vel.y, airborne)
+        write!(
+            f,
+            "pos: ({:>+5.2}, {:>+5.2}), vel: ({:>+5.2}, {:>+5.2}) |{}|",
+            self.pos.x, self.pos.y, self.vel.x, self.vel.y, airborne,
+        )
     }
 }
 
