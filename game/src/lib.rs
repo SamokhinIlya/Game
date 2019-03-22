@@ -17,7 +17,7 @@ use utils::*;
 use crate::{
     render::Color,
     vector::{
-        V2, V2f, V2i,
+        prelude::*,
         distance_sq,
     },
     tilemap::{
@@ -65,7 +65,7 @@ struct GameData {
     pub enemy_bmp_right: Bitmap,
     pub enemy_bmp_left: Bitmap,
 
-    pub font_bmp: render::FontBitmaps,
+    pub font_bmp: render::text::FontBitmaps,
 }
 
 struct PlayerBmps {
@@ -79,14 +79,12 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
         tilemap: Tilemap::load("data/levels/map_00")
-            .unwrap_or_else(|_| {
-                Tilemap::new(
-                    15,
-                    15,
-                    //SCREEN_WIDTH_IN_TILES.ceil() as i32,
-                    //SCREEN_HEIGHT_IN_TILES.ceil() as i32,
-                )
-            }),
+            .unwrap_or_else(|_| Tilemap::new(
+                15,
+                15,
+                //SCREEN_WIDTH_IN_TILES.ceil() as i32,
+                //SCREEN_HEIGHT_IN_TILES.ceil() as i32,
+            )),
         camera_pos: v2!(0.0, 0.0),
         player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
 
@@ -104,7 +102,7 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
         },
         enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
         enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
-        font_bmp: render::FontBitmaps::load("data/fonts/Inconsolata-Regular.ttf").unwrap(),
+        font_bmp: render::text::FontBitmaps::new("data/fonts/Inconsolata-Regular.ttf", 20).unwrap(),
     });
 
     Box::into_raw(result) as RawPtr
@@ -231,9 +229,10 @@ fn playing(
                     None
                 };
                 let jump = enemy.pos.y < data.player.pos.y;
+
                 MovementCommand::Platformer { dir, jump }
             },
-            Knockback::No => MovementCommand::Velocity(v2!(0.0, 0.0)),
+            Knockback::No => MovementCommand::Acceleration(v2!(0.0, 0.0)),
             Knockback::Knocked { time_remaining, just_hit: true } => {
                 enemy.health.knockback = Knockback::Knocked {
                     time_remaining,
@@ -249,18 +248,18 @@ fn playing(
                     force * 3.0,
                 ))
             },
-            Knockback::Knocked { time_remaining, just_hit: false } => {
-                let new_time_remaining = time_remaining - dt;
-                enemy.health.knockback = if new_time_remaining <= 0.0 {
+            Knockback::Knocked { mut time_remaining, just_hit: false } => {
+                time_remaining -= dt;
+                enemy.health.knockback = if time_remaining <= 0.0 {
                     Knockback::No
                 } else {
                     Knockback::Knocked {
-                        time_remaining: new_time_remaining,
+                        time_remaining,
                         just_hit: false,
                     }
                 };
 
-                MovementCommand::Velocity(v2!(0.0, 0.0))
+                MovementCommand::Acceleration(v2!(0.0, 0.0))
             },
         };
         if let MovementCommand::Platformer { dir: Some(dir), .. } = enemy_command {
@@ -279,12 +278,12 @@ fn playing(
         clamp(
             &mut data.camera_pos.x,
             0.0,
-            data.tilemap.width as f32 - SCREEN_WIDTH_IN_TILES,
+            data.tilemap.width() as f32 - SCREEN_WIDTH_IN_TILES,
         );
         clamp(
             &mut data.camera_pos.y,
             0.0,
-            data.tilemap.height as f32 - SCREEN_HEIGHT_IN_TILES,
+            data.tilemap.height() as f32 - SCREEN_HEIGHT_IN_TILES,
         );
     }
 
@@ -336,8 +335,27 @@ fn level_editor(
     if input.keyboard[KBKey::S].pressed() && input.keyboard[KBKey::Ctrl].is_down() {
         let save_result = data.tilemap.save("data/levels/map_00");
         if save_result.is_err() {
-            data.font_bmp.draw_string(screen, (10, 10), "Error saving bitmap");
+            //TODO: error info
+            data.font_bmp.draw_string(screen, v2!(10, 10), "Error saving bitmap");
         }
+    }
+
+    let mut new_tilemap_size = data.tilemap.dim();
+    match (input.keyboard[KBKey::Right].pressed(), input.keyboard[KBKey::Left].pressed()) {
+        (true, false) => new_tilemap_size.x += 1,
+        (false, true) => new_tilemap_size.x -= 1,
+        _ => (),
+    }
+    match (input.keyboard[KBKey::Up].pressed(), input.keyboard[KBKey::Down].pressed()) {
+        (true, false) => new_tilemap_size.y += 1,
+        (false, true) => new_tilemap_size.y -= 1,
+        _ => (),
+    }
+    if new_tilemap_size != data.tilemap.dim()
+        && new_tilemap_size.x > 0
+        && new_tilemap_size.y > 0
+    {
+        data.tilemap.resize(new_tilemap_size.x, new_tilemap_size.y);
     }
 
     if !input.keyboard[KBKey::Ctrl].is_down() {
@@ -376,15 +394,27 @@ fn level_editor(
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
     data.tilemap.draw_outline(screen, data.camera_pos);
 
+    let tilemap_info = &format!("{}x{}", data.tilemap.width(), data.tilemap.height());
+    //TODO: get_bbox method?
+    let min_text_box = v2!(50, 50);
+    let max_text_box = min_text_box + v2!(data.font_bmp.width(tilemap_info), data.font_bmp.height());
+    render::fill_rect(screen, min_text_box, max_text_box, Color::BLACK);
+    data.font_bmp.draw_string(screen, min_text_box, tilemap_info);
+
+    let resize_prompt = "Use arrow keys to change tilemap size.";
+    let min_text_box = v2!(50, max_text_box.y);
+    let max_text_box = min_text_box + v2!(data.font_bmp.width(resize_prompt), data.font_bmp.height());
+    render::fill_rect(screen, min_text_box, max_text_box, Color::BLACK);
+    data.font_bmp.draw_string(screen, min_text_box, resize_prompt);
+
     /* draw yellow outline */ {
         let thickness = 4;
-        render::fill_rect(screen, (0, 0), (thickness, screen.height()), Color::YELLOW);
-        render::fill_rect(screen, (screen.width() - thickness, 0), screen.dim(), Color::YELLOW);
-        render::fill_rect(screen, (0, 0), (screen.width(), thickness), Color::YELLOW);
-        render::fill_rect(screen, (0, screen.height() - thickness), screen.dim(), Color::YELLOW);
+        //FIXME:
+        render::fill_rect(screen, v2!(0, 0), v2!(thickness, screen.height()), Color::YELLOW);
+        render::fill_rect(screen, v2!(screen.width() - thickness, 0), screen.dim().into(), Color::YELLOW);
+        render::fill_rect(screen, v2!(0, 0), v2!(screen.width(), thickness), Color::YELLOW);
+        render::fill_rect(screen, v2!(0, screen.height() - thickness), screen.dim().into(), Color::YELLOW);
     } 
-
-    data.font_bmp.draw_string(screen, (100, 100), "Hello, World!");
 
     format!("{:?}", screen.dim())
 }
@@ -494,7 +524,12 @@ impl Entity {
         }
 
         let (V2 { x: mut dx, y: mut dy }, mut new_vel) = match command {
+            MovementCommand::Acceleration(a) => {
+                let a = a + v2!(friction(self.vel.x), 0.0) + GRAVITY;
+                (delta_position(a, self.vel, dt), self.vel + delta_velocity(a, dt))
+            },
             MovementCommand::Velocity(new_vel) => {
+                //TODO:             new_vel?   vvvvvvvv
                 (delta_position(v2!(0.0, 0.0), self.vel, dt), new_vel)
             },
             MovementCommand::Platformer { dir, jump } => {
@@ -519,6 +554,7 @@ impl Entity {
                             v2!(new_velx, new_vely)
                         };
                         let acc = v2!(acc_x, 0.0);
+
                         (delta_position(acc, self.vel, dt), new_vel)
                     },
                     MovementState::InTheAir { jumped_again: false } if jump => {
@@ -531,6 +567,7 @@ impl Entity {
                             0.75 * JUMP_VEL,
                         );
                         let acc = v2!(acc_x, 0.0);
+
                         (delta_position(acc, self.vel, dt), new_vel)
                     },
                     MovementState::InTheAir { .. } => {
@@ -541,6 +578,7 @@ impl Entity {
                             };
                             v2!(acc_x, GRAVITY.y)
                         };
+
                         (delta_position(acc, self.vel, dt), self.vel + delta_velocity(acc, dt))
                     },
                 }
@@ -597,6 +635,7 @@ impl std::fmt::Display for Entity {
 
 #[derive(Copy, Clone, Debug)]
 enum MovementCommand {
+    Acceleration(V2f),
     Velocity(V2f),
     Platformer { dir: Option<Direction>, jump: bool },
 }

@@ -1,9 +1,11 @@
+pub mod text;
+
 use utils::clamp;
 use crate::bitmap::Bitmap;
-use crate::vector::V2i;
+use crate::vector::{V2, V2i};
 
-pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color) {
-    for row in dst_bmp.clamped_view(p0, p1) {
+pub fn fill_rect(dst_bmp: &Bitmap, min: V2i, max: V2i, color: Color) {
+    for row in dst_bmp.clamped_view(min, max) {
         for pxl in row {
             *pxl = color.into();
         }
@@ -73,11 +75,11 @@ pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
     let dst0 = p;
     let dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);
 
-    let dst_view = dst_bmp.clamped_view(dst0, dst1);
-    let src_view = src_bmp.clamped_view(src0, src1);
+    //FIXME:
+    let dst_view = dst_bmp.clamped_view(dst0.into(), dst1.into());
+    let src_view = src_bmp.clamped_view(src0.into(), src1.into());
     for (dst_row, src_row) in dst_view.zip(src_view) {
         for (dst, src) in dst_row.iter_mut().zip(src_row.iter_mut()) {
-            //FIXME: slow!
             let src_color = *src;
             let dst_color = *dst;
 
@@ -105,78 +107,8 @@ pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
 
 #[inline]
 pub fn clear(dst_bmp: &Bitmap, color: Color) {
-    fill_rect(dst_bmp, (0, 0), dst_bmp.dim(), color);
-}
-
-use std::collections::HashMap;
-use std::path::Path;
-use crate::file::Load;
-
-//TODO: if height is smaller that 20 letters are barely visible
-pub struct FontBitmaps {
-    characters: HashMap<char, Bitmap>,
-}
-
-impl Load for FontBitmaps {
-    fn load<P>(filepath: P) -> std::io::Result<Self>
-        where P: AsRef<Path>
-    {
-        use rusttype::{point, FontCollection, PositionedGlyph, Scale};
-
-        let font = {
-            let file = crate::file::read_entire_file(filepath)?;
-            let collection = FontCollection::from_bytes(file).unwrap_or_else(|e| {
-                panic!("error constructing a FontCollection from bytes: {}", e);
-            });
-            collection.into_font().unwrap_or_else(|e| {
-                panic!("error turning FontCollection into a Font: {}", e);
-            })
-        };
-
-        const CHAR_HEIGHT: i32 = 20;
-
-        let scale = Scale::uniform(CHAR_HEIGHT as f32);
-
-        // The origin of a line of text is at the baseline (roughly where
-        // non-descending letters sit). We don't want to clip the text, so we shift
-        // it down with an offset when laying it out. v_metrics.ascent is the
-        // distance between the baseline and the highest edge of any glyph in
-        // the font. That's enough to guarantee that there's no clipping.
-        let v_metrics = font.v_metrics(scale);
-        let offset = point(0.0, v_metrics.ascent);
-
-        const ALL_SYMBOLS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,!? ";
-        let glyphs: Vec<PositionedGlyph> = font.layout(ALL_SYMBOLS, scale, offset).collect();
-
-        let mut char_bitmaps = HashMap::new();
-        for (g, ch) in glyphs.iter().zip(ALL_SYMBOLS.chars()) {
-            if let Some(bbox) = g.pixel_bounding_box() {
-                let char_width = bbox.max.x - bbox.min.x;
-                let mut char_bmp = Bitmap::with_dimensions(char_width, CHAR_HEIGHT)
-                    .filled(Color::TRANSPARENT);
-                g.draw(|x, y, v| {
-                    let x = x as i32;
-                    let y = y as i32 + (bbox.min.y as i32);
-                    char_bmp[(x, y)] = Color::argb(v, 1.0, 1.0, 1.0).into();
-                });
-                char_bitmaps.insert(ch, char_bmp);
-            }
-        }
-        char_bitmaps.insert(' ', Bitmap::with_dimensions(CHAR_HEIGHT / 2, CHAR_HEIGHT).filled(Color::TRANSPARENT));
-
-        Ok(FontBitmaps { characters: char_bitmaps })
-    }
-}
-
-impl FontBitmaps {
-    pub fn draw_string(&self, dst: &Bitmap, (mut x, y): (i32, i32), string: &str) {
-        for ch in string.chars() {
-            let bmp = self.characters.get(&ch)
-                .unwrap_or_else(|| panic!("No bitmap for character: {}", ch));
-            draw_bmp(dst, bmp, (x, y));
-            x += bmp.width();
-        }
-    }
+    //FIXME:
+    fill_rect(dst_bmp, v2!(0, 0), dst_bmp.dim().into(), color);
 }
 
 #[derive(Copy, Clone)]

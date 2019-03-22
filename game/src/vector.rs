@@ -6,10 +6,18 @@ use core::ops::{
     Neg,
 };
 
+pub mod prelude {
+    pub use super::{
+        Num32,
+        V2, V2i, V2f,
+    };
+}
+
 pub trait Num32:
     Sized + Copy + Clone
     + Send + Sync
     + Debug
+    + PartialEq
     + Add<Output=Self> + AddAssign
     + Sub<Output=Self> + SubAssign
     + Mul<Output=Self> + MulAssign
@@ -19,7 +27,7 @@ pub trait Num32:
 impl Num32 for i32 {}
 impl Num32 for f32 {}
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct V2<T: Num32> {
     pub x: T,
     pub y: T,
@@ -43,6 +51,12 @@ impl<T: Num32> V2<T> {
 impl<T: Num32> From<(T, T)> for V2<T> {
     fn from((x, y): (T, T)) -> Self {
         v2!(x, y)
+    }
+}
+
+impl<T: Num32> Into<(T, T)> for V2<T> {
+    fn into(self) -> (T, T) {
+        (self.x, self.y)
     }
 }
 

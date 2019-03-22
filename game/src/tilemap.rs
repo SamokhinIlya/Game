@@ -11,6 +11,7 @@ use crate::{
     file::*,
 };
 
+//FIXME: variable
 pub const TILE_SIZE: i32 = 64;
 //FIXME: these should be derived from TILE_SIZE and screen_size
 pub const H_DRAW_TILES: i32 = 15;
@@ -41,10 +42,14 @@ pub fn tilemap_pos_to_screen_pos(
     )
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Tile {
     Empty = 0,
     Ground = 1,
+}
+
+impl Default for Tile {
+    fn default() -> Self { Tile::Empty }
 }
 
 impl Tile {
@@ -67,8 +72,8 @@ impl Tile {
 
 #[derive(Clone)]
 pub struct Tilemap {
-    pub width: i32,
-    pub height: i32,
+    width: i32,
+    height: i32,
     pub map: Vec<Tile>,
 }
 
@@ -82,6 +87,16 @@ impl Tilemap {
         }
     }
 
+    #[inline(always)]
+    pub fn width(&self) -> i32 { self.width }
+
+    #[inline(always)]
+    pub fn height(&self) -> i32 { self.height }
+
+    #[inline(always)]
+    pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
+
+    //TODO: trait Index
     pub unsafe fn get_unchecked(&self, x: i32, y: i32) -> Tile {
         debug_assert!(x >= 0 && x < self.width, y >= 0 && y < self.height);
         *self.map.get_unchecked((y * self.width + x) as usize)
@@ -106,6 +121,38 @@ impl Tilemap {
             Ok(())
         } else {
             Err(())
+        }
+    }
+
+    pub fn resize(&mut self, new_width: i32, new_height: i32) {
+        assert!(new_width > 0, new_height > 0);
+
+        let old_width = self.width as usize;
+        self.width = new_width;
+        let new_width = new_width as usize;
+        if new_width > old_width {
+            let dwidth = new_width - old_width;
+            self.map.resize(new_width * self.height as usize, Default::default());
+
+            let mut cursor = old_width;
+            while cursor < self.map.len() {
+                self.map[cursor..].rotate_right(dwidth);
+                cursor += new_width;
+            }
+        } else if new_width < old_width {
+            let dwidth = old_width - new_width;
+
+            let mut cursor = new_width;
+            while cursor < self.map.len() {
+                self.map[cursor..].rotate_left(dwidth);
+                cursor += new_width;
+            }
+            self.map.resize(new_width * self.height as usize, Default::default());
+        }
+
+        if new_height != self.height {
+            self.map.resize((self.width * new_height) as usize, Default::default());
+            self.height = new_height;
         }
     }
 
