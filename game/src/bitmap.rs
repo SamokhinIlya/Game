@@ -6,7 +6,7 @@ use std::{
     slice,
 };
 use crate::file::{Load, read_entire_file};
-use crate::vector::V2i;
+use crate::vector::prelude::*;
 use crate::render::Color;
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl Index<(i32, i32)> for Bitmap {
     type Output = u32;
     fn index(&self, (x, y): (i32, i32)) -> &Self::Output {
         unsafe {
-            &*self.data.add((y * self.width + x) as usize)
+            &*self.ptr_mut_at(x as usize, y as usize)
         }
     }
 }
@@ -37,15 +37,21 @@ impl Index<(i32, i32)> for Bitmap {
 impl IndexMut<(i32, i32)> for Bitmap {
     fn index_mut(&mut self, (x, y): (i32, i32)) -> &mut u32 {
         unsafe {
-            &mut *self.data.add((y * self.width + x) as usize)
+            &mut *self.ptr_mut_at(x as usize, y as usize)
         }
     }
 }
 
+
 impl Bitmap {
+    #[inline(always)]
     pub fn width(&self) -> i32 { self.width }
+
+    #[inline(always)]
     pub fn height(&self) -> i32 { self.height }
-    pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
+
+    #[inline(always)]
+    pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
 
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         assert!(width > 0 && height > 0);
@@ -88,6 +94,15 @@ impl Bitmap {
             width: (bottom_right.x - top_left.x) as usize,
             bmp: self,
         }
+    }
+
+    unsafe fn ptr_mut_at(&self, x: usize, y: usize) -> *mut u32 {
+        assert!(
+            x < self.width as usize && y < self.height as usize,
+            "Bitmap index out of bounds. (width, height) = {:?}, (x, y) = {:?}",
+            self.dim(), (x, y), 
+        );
+        self.data.add(y * self.width as usize + x)
     }
 }
 

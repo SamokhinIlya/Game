@@ -25,7 +25,7 @@ impl FontBitmaps {
     pub fn draw_string(&self, dst: &Bitmap, V2i { x, y }: V2i, s: &str) -> i32 {
         let mut current_x = x;
         for bmp in self.to_bitmaps(s) {
-            draw_bmp(dst, bmp, (current_x, y));
+            draw_bmp(dst, bmp, v2!(current_x, y));
             current_x += bmp.width();
         }
         current_x - x

@@ -18,10 +18,10 @@ pub trait Num32:
     + Send + Sync
     + Debug
     + PartialEq
-    + Add<Output=Self> + AddAssign
-    + Sub<Output=Self> + SubAssign
-    + Mul<Output=Self> + MulAssign
-    + Neg<Output=Self>
+    + Add<Output = Self> + AddAssign
+    + Sub<Output = Self> + SubAssign
+    + Mul<Output = Self> + MulAssign
+    + Neg<Output = Self>
 {}
 
 impl Num32 for i32 {}

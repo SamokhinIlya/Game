@@ -382,9 +382,9 @@ fn level_editor(
 
     if let Some(tile) = maybe_tile {
         let tile_pos = screen_pos_to_tilemap_pos(
-            input.mouse.pos(),
+            input.mouse.pos().into(),
             data.camera_pos,
-            (screen.width(), screen.height()),
+            screen.dim().into(),
         );
         let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, tile);
     }
@@ -394,27 +394,29 @@ fn level_editor(
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
     data.tilemap.draw_outline(screen, data.camera_pos);
 
+    let margin = v2!(5, 5);
+
     let tilemap_info = &format!("{}x{}", data.tilemap.width(), data.tilemap.height());
     //TODO: get_bbox method?
     let min_text_box = v2!(50, 50);
-    let max_text_box = min_text_box + v2!(data.font_bmp.width(tilemap_info), data.font_bmp.height());
+    let max_text_box = min_text_box
+        + v2!(data.font_bmp.width(tilemap_info), data.font_bmp.height())
+        + margin * 2;
     render::fill_rect(screen, min_text_box, max_text_box, Color::BLACK);
-    data.font_bmp.draw_string(screen, min_text_box, tilemap_info);
+    render::draw_rect(screen, min_text_box, max_text_box, Color::WHITE, 1);
+    data.font_bmp.draw_string(screen, min_text_box + margin, tilemap_info);
 
     let resize_prompt = "Use arrow keys to change tilemap size.";
     let min_text_box = v2!(50, max_text_box.y);
-    let max_text_box = min_text_box + v2!(data.font_bmp.width(resize_prompt), data.font_bmp.height());
+    let max_text_box = min_text_box
+        + v2!(data.font_bmp.width(resize_prompt), data.font_bmp.height())
+        + margin * 2;
     render::fill_rect(screen, min_text_box, max_text_box, Color::BLACK);
-    data.font_bmp.draw_string(screen, min_text_box, resize_prompt);
+    render::draw_rect(screen, min_text_box, max_text_box, Color::WHITE, 1);
+    data.font_bmp.draw_string(screen, min_text_box + margin, resize_prompt);
 
-    /* draw yellow outline */ {
-        let thickness = 4;
-        //FIXME:
-        render::fill_rect(screen, v2!(0, 0), v2!(thickness, screen.height()), Color::YELLOW);
-        render::fill_rect(screen, v2!(screen.width() - thickness, 0), screen.dim().into(), Color::YELLOW);
-        render::fill_rect(screen, v2!(0, 0), v2!(screen.width(), thickness), Color::YELLOW);
-        render::fill_rect(screen, v2!(0, screen.height() - thickness), screen.dim().into(), Color::YELLOW);
-    } 
+    // draw yellow outline
+    render::draw_rect(screen, v2!(0, 0), screen.dim().into(), Color::YELLOW, 5);
 
     format!("{:?}", screen.dim())
 }
@@ -503,8 +505,8 @@ impl Entity {
     }
 
     pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2f) {
-        let (x0, y0) = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
-        render::draw_bmp(screen, bmp, (x0 - TILE_SIZE / 2, y0 - TILE_SIZE / 2));
+        let screen_pos = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
+        render::draw_bmp(screen, bmp, screen_pos - v2!(TILE_SIZE / 2, TILE_SIZE / 2));
     }
 
     //TODO: derive consts from height and length of a desired jump

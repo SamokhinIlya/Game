@@ -12,21 +12,22 @@ pub fn fill_rect(dst_bmp: &Bitmap, min: V2i, max: V2i, color: Color) {
     }
 }
 
-//TODO: thickness
-pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, thickness: u8, color: Color) {
+pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thickness: i32) {
     let draw_left = min.x >= 0;
     let draw_top = min.y >= 0;
-    let draw_right = max.x < dst.width();
-    let draw_bottom = max.y < dst.height();
+    let draw_right = max.x <= dst.width();
+    let draw_bottom = max.y <= dst.height();
 
     if draw_left && draw_top && draw_right && draw_bottom {
-        for x in min.x..max.x {
-            dst[(x, min.y)] = color.into();
-            dst[(x, max.y)] = color.into();
-        }
-        for y in (min.y + 1)..max.y {
-            dst[(min.x    , y)] = color.into();
-            dst[(max.x - 1, y)] = color.into();
+        for t in 0..thickness {
+            for x in min.x..max.x {
+                dst[(x, min.y + t)] = color.into();
+                dst[(x, max.y - t - 1)] = color.into();
+            }
+            for y in (min.y + 1)..max.y {
+                dst[(min.x + t    , y)] = color.into();
+                dst[(max.x - t - 1, y)] = color.into();
+            }
         }
     } else {
         if !draw_left {
@@ -43,34 +44,49 @@ pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, thickness: u8, co
         }
 
         if draw_left {
-            for y in (min.y + 1)..max.y {
-                dst[(min.x    , y)] = color.into();
+            for t in 0..thickness {
+                for y in (min.y + 1)..max.y {
+                    dst[(min.x + t, y)] = color.into();
+                }
             }
         }
         if draw_top {
-            for x in min.x..max.x {
-                dst[(x, min.y)] = color.into();
+            for t in 0..thickness {
+                for x in min.x..max.x {
+                    dst[(x, min.y + t)] = color.into();
+                }
             }
         }
         if draw_right {
-            for y in (min.y + 1)..max.y {
-                dst[(max.x - 1, y)] = color.into();
+            for t in 0..thickness {
+                for y in (min.y + 1)..max.y {
+                    dst[(max.x - t - 1, y)] = color.into();
+                }
             }
         }
         if draw_bottom {
-            for x in min.x..max.x {
-                dst[(x, max.y)] = color.into();
+            for t in 0..thickness {
+                for x in min.x..max.x {
+                    dst[(x, max.y - t - 1)] = color.into();
+                }
             }
         }
     }
 }
 
-pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
+pub fn draw_line(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thickness: i32) {
+    unimplemented!()
+}
+
+pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: V2i) {
+    //FIXME:
+    let p: (i32, i32) = p.into();
     let src0 = (
         if p.0 < 0 { -p.0 } else { 0 },
         if p.1 < 0 { -p.1 } else { 0 },
     );
-    let src1 = src_bmp.dim();
+    //FIXME:
+    let src1: (i32, i32) = src_bmp.dim().into();
 
     let dst0 = p;
     let dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);

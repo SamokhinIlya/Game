@@ -19,26 +19,25 @@ pub const V_DRAW_TILES: i32 = 9;
 pub const SCREEN_WIDTH_IN_TILES: f32 = 15.0;
 pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.4375;
 
-//TODO: (i32, i32) to V2i
 pub fn screen_pos_to_tilemap_pos(
-    screen_pos: (i32, i32),
+    screen_pos: V2i,
     camera: V2f,
-    screen: (i32, i32),
+    screen: V2i,
 ) -> V2f {
     v2!(
-        screen_pos.0 as f32 / TILE_SIZE as f32 + camera.x,
-        (screen.1 - screen_pos.1) as f32 / TILE_SIZE as f32 + camera.y
+        screen_pos.x as f32 / TILE_SIZE as f32 + camera.x,
+        (screen.y - screen_pos.y) as f32 / TILE_SIZE as f32 + camera.y
     )
 }
 
 pub fn tilemap_pos_to_screen_pos(
     tilemap_pos: V2f,
     camera: V2f,
-    screen: (i32, i32),
-) -> (i32, i32) {
-    (
+    screen: V2i,
+) -> V2i {
+    v2!(
         ((tilemap_pos.x - camera.x) * TILE_SIZE as f32) as i32,
-        screen.1 - ((tilemap_pos.y - camera.y) * TILE_SIZE as f32) as i32,
+        screen.y - ((tilemap_pos.y - camera.y) * TILE_SIZE as f32) as i32,
     )
 }
 
@@ -162,16 +161,14 @@ impl Tilemap {
         tile_bitmaps: &[Bitmap],
         camera: V2f,
     ) {
-        for y in 0..=V_DRAW_TILES {
-            let tile_y = camera.y.trunc() as i32 + y;
-            if tile_y < 0 { continue }
-            if tile_y >= self.height { break }
-
-            for x in 0..=H_DRAW_TILES {
-                let tile_x = camera.x.trunc() as i32 + x;
-                if tile_x < 0 { continue }
-                if tile_x >= self.width { break }
-
+        for tile_y in (0..=V_DRAW_TILES)
+            .map(|y| camera.y.trunc() as i32 + y)
+            .filter(|&tile_y| tile_y >= 0 && tile_y < self.height)
+        {
+            for tile_x in (0..=H_DRAW_TILES)
+                .map(|x| camera.x.trunc() as i32 + x)
+                .filter(|&tile_x| tile_x >= 0 && tile_x < self.width)
+            {
                 let tile = unsafe { self.get_unchecked(tile_x, tile_y) };
                 if !tile.is_visible() { continue }
 
@@ -179,12 +176,12 @@ impl Tilemap {
                 // TODO: this should be checked somewhere else (on initialization maybe)
                 debug_assert!(tile_bmp.width() == tile_bmp.height());
 
-                let (x0, y0) = tilemap_pos_to_screen_pos(
+                let V2 { x, y } = tilemap_pos_to_screen_pos(
                     v2!(tile_x as f32, tile_y as f32),
                     camera,
-                    (dst_bmp.width(), dst_bmp.height())
+                    dst_bmp.dim()
                 );
-                render::draw_bmp(dst_bmp, tile_bmp, (x0, y0 - TILE_SIZE));
+                render::draw_bmp(dst_bmp, tile_bmp, v2!(x, y - TILE_SIZE));
             }
         }
     }
@@ -194,14 +191,35 @@ impl Tilemap {
             v2!(0.0, self.height as f32),
             camera,
             dst.dim(),
-        ).into();
+        );
         let max: V2i = tilemap_pos_to_screen_pos(
             v2!(self.width as f32, 0.0),
             camera,
             dst.dim(),
-        ).into();
-        let thickness = 1;
-        render::draw_rect(dst, min, max, thickness, render::Color::YELLOW);
+        );
+        render::draw_rect(dst, min, max, render::Color::YELLOW, 1);
+    }
+
+    pub fn draw_grid(&self, dst: &mut Bitmap, camera: V2f) {
+        for tile_y in (0..=V_DRAW_TILES)
+            .map(|y| camera.y.trunc() as i32 + y)
+            .filter(|&tile_y| tile_y >= 0 && tile_y < self.width)
+        {
+            let y = tile_y * TILE_SIZE;
+            let min = v2!(0, y);
+            let max = v2!(self.width * TILE_SIZE, y);
+            render::draw_line(dst, min, max, render::Color::WHITE, 1);
+        }
+
+        for tile_x in (0..=H_DRAW_TILES)
+            .map(|x| camera.x.trunc() as i32 + x)
+            .filter(|&tile_x| tile_x >= 0 && tile_x < self.width)
+        {
+            let x = tile_x * TILE_SIZE;
+            let min = v2!(x, 0);
+            let max = v2!(x, self.height * TILE_SIZE);
+            render::draw_line(dst, min, max, render::Color::WHITE, 1);
+        }
     }
 }
 
