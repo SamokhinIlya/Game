@@ -81,6 +81,7 @@ pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thi
 // (y - y0) / (y1 - y0) = (x - x0) / (x1 - x0)
 // y = (y1 - y0) / (x1 - x0) * (x - x0) + y0
 pub fn draw_line(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thickness: i32) {
+    //TODO: line clipping
     let width = (max.x - min.x) as f32;
     let height = (max.y - min.y) as f32;
     let slope = height / width;

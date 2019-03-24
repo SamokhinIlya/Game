@@ -208,14 +208,12 @@ impl Tilemap {
                 let bmp = info.get_bmp(tile);
                 // TODO: this should be checked somewhere else (on initialization maybe)
                 debug_assert!(bmp.width() == bmp.height());
-
                 let V2 { x, y } = tilemap_pos_to_screen_pos(
-                    v2!(tile_x as f32, tile_y as f32),
+                    v2!(tile_x, tile_y).into(),
                     camera,
                     dst.dim(),
                     info.size,
                 );
-                //dbg!((x, y));
                 render::draw_bmp(dst, bmp, v2!(x, y - info.size));
             }
         }
@@ -239,30 +237,47 @@ impl Tilemap {
 
     pub fn draw_grid(&self, dst: &mut Bitmap, camera: V2f, info: &TileInfo) {
         use std::cmp::{min, max};
+        use utils::clamp;
 
         let camera_i: V2i = camera.floor().into();
         let v_draw_tiles = info.screen_height.ceil() as i32;
         let h_draw_tiles = info.screen_width.ceil() as i32;
 
-        //let lower_bound = max(camera_i.y, 0);
-        //let upper_bound = min(camera_i.y + v_draw_tiles, self.height - 1);
-        //
-        //for tile_y in lower_bound..upper_bound {
-        //    let y = tile_y * info.size;
-        //    let min = v2!(0, y);
-        //    let max = v2!(self.width * info.size, y);
-        //    render::draw_line(dst, min, max, render::Color::WHITE, 1);
-        //}
+        let lower_bound = max(camera_i.y, 1);
+        let upper_bound = min(camera_i.y + v_draw_tiles + 1, self.height);
 
-        let left_bound = max(camera_i.x, 0);
-        let right_bound = min(camera_i.x + h_draw_tiles, self.width - 1);
+        for tile_y in lower_bound..upper_bound {
+            let mut min = tilemap_pos_to_screen_pos(
+                v2!(0, tile_y).into(),
+                camera,
+                dst.dim(),
+                info.size,
+            );
+            if min.y < 0 || min.y >= dst.height() {
+                continue;
+            }
+            clamp(&mut min.x, 0, dst.width());
 
-        for tile_x in left_bound..right_bound {
-            let x = tile_x * info.size;
-            let min = v2!(x, 0);
-            let max = v2!(x, self.height * info.size);
+            let mut max = tilemap_pos_to_screen_pos(
+                v2!(self.width, tile_y).into(),
+                camera,
+                dst.dim(),
+                info.size,
+            );
+            clamp(&mut max.x, 0, dst.width());
+
             render::draw_line(dst, min, max, render::Color::WHITE, 1);
         }
+
+        //let left_bound = max(camera_i.x, 0);
+        //let right_bound = min(camera_i.x + h_draw_tiles, self.width - 1);
+
+        //for tile_x in left_bound..right_bound {
+        //    let x = tile_x * info.size;
+        //    let min = v2!(x, 0);
+        //    let max = v2!(x, self.height * info.size);
+        //    render::draw_line(dst, min, max, render::Color::WHITE, 1);
+        //}
     }
 }
 

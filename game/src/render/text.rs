@@ -16,7 +16,6 @@ pub struct FontBitmaps {
 }
 
 impl FontBitmaps {
-    #[inline(always)]
     pub fn height(&self) -> i32 { self.height }
 
     /// Draws string of text to the dst `Bitmap`
@@ -65,7 +64,8 @@ impl FontBitmaps {
         let v_metrics = font.v_metrics(scale);
         let offset = point(0.0, v_metrics.ascent);
 
-        const ALL_SYMBOLS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,!? ";
+        const ALL_SYMBOLS: &str =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.,:;!?";
         let glyphs: Vec<PositionedGlyph> = font.layout(ALL_SYMBOLS, scale, offset).collect();
 
         let mut char_bitmaps = HashMap::new();

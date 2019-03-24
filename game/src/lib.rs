@@ -30,6 +30,7 @@ use crate::{
     bitmap::Bitmap,
     file::{Load, Save},
 };
+use crate::render::text::FontBitmaps;
 
 /* TODO: ideas
   - level editor
@@ -388,6 +389,24 @@ fn level_editor(
         }
     }
 
+    let mouse: V2i = screen_pos_to_tilemap_pos(
+        input.mouse.pos().into(),
+        data.camera_pos,
+        screen.dim(),
+        data.tile_info.size,
+    ).trunc().into();
+
+    let mouse_pos_textbox = if input.mouse.pos().0 >= 0 && input.mouse.pos().0 < screen.width()
+        && input.mouse.pos().1 >= 0 && input.mouse.pos().1 < screen.height()
+    {
+        let pos: V2i = input.mouse.pos().into();
+        let text_pos = pos + v2!(5);
+        let text = format!("{} : {}", mouse.x, mouse.y);
+        Some((text, text_pos))
+    } else {
+        None
+    };
+
     let maybe_tile = if input.mouse[MouseKey::LB].is_down() {
         Some(Tile::Ground)
     } else if input.mouse[MouseKey::RB].is_down() {
@@ -397,18 +416,10 @@ fn level_editor(
     };
 
     if let Some(tile) = maybe_tile {
-        let i: V2i = screen_pos_to_tilemap_pos(
-            input.mouse.pos().into(),
-            data.camera_pos,
-            screen.dim(),
-            data.tile_info.size,
-        )
-        .trunc()
-        .into();
-        if i.x >= 0 && i.x < data.tilemap.width()
-            && i.y >= 0 && i.y < data.tilemap.height()
+        if mouse.x >= 0 && mouse.x < data.tilemap.width()
+            && mouse.y >= 0 && mouse.y < data.tilemap.height()
         {
-            data.tilemap[(i.x, i.y)] = tile;
+            data.tilemap[(mouse.x, mouse.y)] = tile;
         }
     }
 
@@ -418,26 +429,43 @@ fn level_editor(
     data.tilemap.draw_grid(screen, data.camera_pos, &data.tile_info);
     data.tilemap.draw_outline(screen, data.camera_pos, &data.tile_info);
 
-    let margin = v2!(5, 5);
+    fn draw_text_box(
+        dst: &mut Bitmap,
+        font: &FontBitmaps,
+        text: &str,
+        p: V2i
+    ) -> V2i {
+        const MARGIN: V2i = v2!(5, 5);
 
-    let tilemap_info = &format!("{}x{}", data.tilemap.width(), data.tilemap.height());
-    //TODO: get_bbox method?
-    let min_text_box = v2!(50);
-    let max_text_box = min_text_box
-        + v2!(data.font_bmp.width(tilemap_info), data.font_bmp.height())
-        + margin * 2;
-    render::fill_rect(screen, min_text_box, max_text_box, Color::BLACK);
-    render::draw_rect(screen, min_text_box, max_text_box, Color::WHITE, 1);
-    data.font_bmp.draw_string(screen, min_text_box + margin, tilemap_info);
+        //TODO: get_bbox method?
+        let min_text_box = p;
+        let max_text_box = min_text_box
+            + v2!(font.width(text), font.height())
+            + MARGIN * 2;
+        render::fill_rect(dst, min_text_box, max_text_box, Color::BLACK);
+        render::draw_rect(dst, min_text_box, max_text_box, Color::WHITE, 1);
+        font.draw_string(dst, min_text_box + MARGIN, text);
 
-    let resize_prompt = "Use arrow keys to change tilemap size.";
-    let min_text_box = v2!(50, max_text_box.y);
-    let max_text_box = min_text_box
-        + v2!(data.font_bmp.width(resize_prompt), data.font_bmp.height())
-        + margin * 2;
-    render::fill_rect(screen, min_text_box, max_text_box, Color::BLACK);
-    render::draw_rect(screen, min_text_box, max_text_box, Color::WHITE, 1);
-    data.font_bmp.draw_string(screen, min_text_box + margin, resize_prompt);
+        max_text_box
+    }
+
+    let bottom_left = draw_text_box(
+        screen,
+        &data.font_bmp,
+        &format!("{}x{}", data.tilemap.width(), data.tilemap.height()),
+        v2!(50),
+    );
+
+    let _ = draw_text_box(
+        screen,
+        &data.font_bmp,
+        "Use arrow keys to change tilemap size.",
+        v2!(50, bottom_left.y),
+    );
+
+    if let Some((text, pos)) = mouse_pos_textbox {
+        draw_text_box(screen, &data.font_bmp, &text, pos);
+    }
 
     // draw yellow outline
     render::draw_rect(screen, v2!(0), screen.dim(), Color::YELLOW, 5);
