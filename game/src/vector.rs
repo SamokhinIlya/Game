@@ -40,17 +40,27 @@ macro_rules! v2 {
     ($x:expr, $y:expr$(,)*) => {
         V2 { x: $x, y: $y }
     };
+    ($val:expr) => {
+        V2 { x: $val, y: $val }
+    };
 }
 
+//TODO: add const when
+// "trait bounds other than `Sized` on const fn parameters are unstable"
+// is no more
 impl<T: Num32> V2<T> {
     pub fn new(x: T, y: T) -> Self {
         V2 { x, y }
     }
 
+    pub fn diag(val: T) -> Self {
+        Self::new(val, val)
+    }
+
     pub fn map<F>(self, f: F) -> Self
         where F: Fn(T) -> T
     {
-        V2 { x: f(self.x), y: f(self.y) }
+        Self::new(f(self.x), f(self.y))
     }
 }
 
@@ -59,7 +69,7 @@ impl V2<f32> {
         Self::map(self, f32::floor)
     }
 
-    pub fn trunc(mut self) -> Self {
+    pub fn trunc(self) -> Self {
         Self::map(self, f32::trunc)
     }
 }

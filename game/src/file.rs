@@ -4,8 +4,13 @@ use std::{
     marker::Sized,
 };
 
-pub use std::path::Path;
-pub use std::io;
+pub mod prelude {
+    pub use super::{Save, Load};
+    pub use std::{path::Path, io};
+}
+
+use std::path::Path;
+use std::io;
 
 pub trait Load
     where Self: Sized

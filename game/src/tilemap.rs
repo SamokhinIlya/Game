@@ -1,46 +1,55 @@
-use std::{
-    ptr,
-    mem::size_of,
-    ops::{Index, IndexMut}
-};
-use std::mem::uninitialized as uninit;
+use std::ops::{Index, IndexMut};
 use crate::{
     render,
-    vector::{V2, V2f, V2i},
+    vector::prelude::*,
     bitmap::Bitmap,
-    //TODO: prelude?
-    file::*,
+    file::prelude::*,
 };
-
-//FIXME: variable
-pub const TILE_SIZE: i32 = 64;
-//FIXME: these should be derived from TILE_SIZE and screen_size
-pub const H_DRAW_TILES: i32 = 15;
-pub const V_DRAW_TILES: i32 = 9;
-pub const SCREEN_WIDTH_IN_TILES: f32 = 15.0;
-pub const SCREEN_HEIGHT_IN_TILES: f32 = 8.4375;
 
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: V2i,
     camera: V2f,
     screen: V2i,
+    tile_size: i32,
 ) -> V2f {
-    v2!(
-        screen_pos.x as f32 / TILE_SIZE as f32 + camera.x,
-        (screen.y - screen_pos.y) as f32 / TILE_SIZE as f32 + camera.y
-    )
+    let x = screen_pos.x as f32 / tile_size as f32 + camera.x;
+    let y = (screen.y - screen_pos.y) as f32 / tile_size as f32 + camera.y;
+    v2!(x, y)
 }
 
 pub fn tilemap_pos_to_screen_pos(
     tilemap_pos: V2f,
     camera: V2f,
     screen: V2i,
+    tile_size: i32,
 ) -> V2i {
-    v2!(
-        ((tilemap_pos.x - camera.x) * TILE_SIZE as f32) as i32,
-        screen.y - ((tilemap_pos.y - camera.y) * TILE_SIZE as f32) as i32,
-    )
+    let x = ((tilemap_pos.x - camera.x) * tile_size as f32) as i32;
+    let y = screen.y - ((tilemap_pos.y - camera.y) * tile_size as f32) as i32;
+    v2!(x, y)
 }
+
+// TileInfo
+
+pub struct TileInfo {
+    pub size: i32,
+    pub screen_width: f32,
+    pub screen_height: f32,
+    pub screen_width_in_px: i32,
+    pub screen_height_in_px: i32,
+    pub bmps: [Bitmap; 1],
+}
+
+impl TileInfo {
+    pub fn get_bmp(&self, tile: Tile) -> &Bitmap {
+        assert!(match tile {
+            Tile::Ground => true,
+            _ => false,
+        });
+        &self.bmps[0]
+    }
+}
+
+// Tile
 
 #[derive(Copy, Clone, Debug)]
 pub enum Tile {
@@ -69,6 +78,8 @@ impl Tile {
         }
     }
 }
+
+// Tilemap
 
 #[derive(Clone)]
 pub struct Tilemap {
@@ -136,7 +147,11 @@ impl Tilemap {
     }
 
     pub fn resize(&mut self, new_width: i32, new_height: i32) {
-        assert!(new_width > 0, new_height > 0);
+        assert!(
+            new_width > 0 && new_height > 0,
+            "Tilemap::resize: (new_width, new_height): {:?}",
+            (new_width, new_height),
+        );
 
         let old_width = self.width as usize;
         self.width = new_width;
@@ -170,71 +185,82 @@ impl Tilemap {
     pub fn draw(
         &self,
         dst: &Bitmap,
-        tile_bitmaps: &[Bitmap],
         camera: V2f,
+        info: &TileInfo,
     ) {
         use std::cmp::{min, max};
 
         let camera_i: V2i = camera.floor().into();
+        let v_draw_tiles = info.screen_height.ceil() as i32;
+        let h_draw_tiles = info.screen_width.ceil() as i32;
 
         let lower_bound = max(camera_i.y, 0);
-        let upper_bound = min(camera_i.y + V_DRAW_TILES, self.height);
+        let upper_bound = min(camera_i.y + v_draw_tiles, self.height - 1);
 
         let left_bound = max(camera_i.x, 0);
-        let right_bound = min(camera_i.x + H_DRAW_TILES, self.width);
+        let right_bound = min(camera_i.x + h_draw_tiles, self.width - 1);
 
-        for tile_y in lower_bound..upper_bound {
-            for tile_x in left_bound..right_bound {
+        for tile_y in lower_bound..=upper_bound {
+            for tile_x in left_bound..=right_bound {
                 let tile = self[(tile_x, tile_y)];
                 if !tile.is_visible() { continue }
 
-                let bmp = get_tile_bmp(tile_bitmaps, tile);
+                let bmp = info.get_bmp(tile);
                 // TODO: this should be checked somewhere else (on initialization maybe)
                 debug_assert!(bmp.width() == bmp.height());
 
                 let V2 { x, y } = tilemap_pos_to_screen_pos(
                     v2!(tile_x as f32, tile_y as f32),
                     camera,
-                    dst.dim()
+                    dst.dim(),
+                    info.size,
                 );
                 //dbg!((x, y));
-                render::draw_bmp(dst, bmp, v2!(x, y - TILE_SIZE));
+                render::draw_bmp(dst, bmp, v2!(x, y - info.size));
             }
         }
     }
 
-    pub fn draw_outline(&self, dst: &mut Bitmap, camera: V2f) {
+    pub fn draw_outline(&self, dst: &mut Bitmap, camera: V2f, info: &TileInfo) {
         let min: V2i = tilemap_pos_to_screen_pos(
             v2!(0.0, self.height as f32),
             camera,
             dst.dim(),
+            info.size,
         );
         let max: V2i = tilemap_pos_to_screen_pos(
             v2!(self.width as f32, 0.0),
             camera,
             dst.dim(),
+            info.size,
         );
         render::draw_rect(dst, min, max, render::Color::YELLOW, 1);
     }
 
-    pub fn draw_grid(&self, dst: &mut Bitmap, camera: V2f) {
-        for tile_y in (0..=V_DRAW_TILES)
-            .map(|y| camera.y.trunc() as i32 + y)
-            .filter(|&tile_y| tile_y >= 0 && tile_y < self.width)
-        {
-            let y = tile_y * TILE_SIZE;
-            let min = v2!(0, y);
-            let max = v2!(self.width * TILE_SIZE, y);
-            render::draw_line(dst, min, max, render::Color::WHITE, 1);
-        }
+    pub fn draw_grid(&self, dst: &mut Bitmap, camera: V2f, info: &TileInfo) {
+        use std::cmp::{min, max};
 
-        for tile_x in (0..=H_DRAW_TILES)
-            .map(|x| camera.x.trunc() as i32 + x)
-            .filter(|&tile_x| tile_x >= 0 && tile_x < self.width)
-        {
-            let x = tile_x * TILE_SIZE;
+        let camera_i: V2i = camera.floor().into();
+        let v_draw_tiles = info.screen_height.ceil() as i32;
+        let h_draw_tiles = info.screen_width.ceil() as i32;
+
+        //let lower_bound = max(camera_i.y, 0);
+        //let upper_bound = min(camera_i.y + v_draw_tiles, self.height - 1);
+        //
+        //for tile_y in lower_bound..upper_bound {
+        //    let y = tile_y * info.size;
+        //    let min = v2!(0, y);
+        //    let max = v2!(self.width * info.size, y);
+        //    render::draw_line(dst, min, max, render::Color::WHITE, 1);
+        //}
+
+        let left_bound = max(camera_i.x, 0);
+        let right_bound = min(camera_i.x + h_draw_tiles, self.width - 1);
+
+        for tile_x in left_bound..right_bound {
+            let x = tile_x * info.size;
             let min = v2!(x, 0);
-            let max = v2!(x, self.height * TILE_SIZE);
+            let max = v2!(x, self.height * info.size);
             render::draw_line(dst, min, max, render::Color::WHITE, 1);
         }
     }
@@ -252,7 +278,9 @@ impl Load for Tilemap {
     fn load<P>(filepath: P) -> io::Result<Self>
         where P: AsRef<Path>
     {
-        let file = read_entire_file(filepath)?;
+        use std::mem::{size_of, uninitialized as uninit};
+
+        let file = crate::file::read_entire_file(filepath)?;
 
         #[allow(clippy::cast_ptr_alignment)]
         let TilemapSize { width, height } = unsafe {
@@ -283,6 +311,8 @@ impl Save for Tilemap {
     fn save<P>(&self, filepath: P) -> io::Result<()>
         where P: AsRef<Path>
     {
+        use std::mem::{size_of, uninitialized as uninit};
+
         let to_file = {
             let tilemap_size = TilemapSize {
                 width: self.width as u32,
@@ -306,14 +336,6 @@ impl Save for Tilemap {
             bytes[size_of::<TilemapSize>()..].copy_from_slice(tilemap_bytes);
             bytes
         };
-        write_bytes_to_file(filepath, to_file.as_slice())
+        crate::file::write_bytes_to_file(filepath, to_file.as_slice())
     }
-}
-
-pub fn get_tile_bmp(tile_bitmaps: &[Bitmap], tile: Tile) -> &Bitmap {
-    assert!(match tile {
-        Tile::Ground => true,
-        _ => false,
-    });
-    &tile_bitmaps[0]
 }

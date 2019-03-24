@@ -23,9 +23,7 @@ use crate::{
     tilemap::{
         Tilemap,
         Tile,
-        TILE_SIZE,
-        SCREEN_WIDTH_IN_TILES,
-        SCREEN_HEIGHT_IN_TILES,
+        TileInfo,
         screen_pos_to_tilemap_pos,
         tilemap_pos_to_screen_pos,
     },
@@ -50,6 +48,8 @@ struct GameData {
     pub state: GameState,
 
     pub tilemap: Tilemap,
+    pub tile_info: TileInfo,
+
     pub camera_pos: V2f,
 
     pub player: Entity,
@@ -60,7 +60,6 @@ struct GameData {
 
     pub enemies: [Entity; 1],
 
-    pub tile_bitmaps: [Bitmap; 1],
     pub player_bmps: PlayerBmps,
     pub enemy_bmp_right: Bitmap,
     pub enemy_bmp_left: Bitmap,
@@ -85,6 +84,14 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
                 //SCREEN_WIDTH_IN_TILES.ceil() as i32,
                 //SCREEN_HEIGHT_IN_TILES.ceil() as i32,
             )),
+        tile_info: TileInfo {
+            size: 64,
+            screen_width: 0.0,
+            screen_height: 0.0,
+            screen_width_in_px: 0,
+            screen_height_in_px: 0,
+            bmps: [Bitmap::load("data/sprites/size_64/test_tile.bmp").unwrap(); 1],
+        },
         camera_pos: v2!(0.0, 0.0),
         player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
 
@@ -93,7 +100,6 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
         player_attack_prev_pos: v2!(0.0, 0.0),
 
         enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 5); 1],
-        tile_bitmaps: [Bitmap::load("data/sprites/size_64/test_tile.bmp").unwrap(); 1],
         player_bmps: PlayerBmps {
             right: Bitmap::load("data/sprites/size_64/test_player_right.bmp").unwrap(),
             left: Bitmap::load("data/sprites/size_64/test_player_left.bmp").unwrap(),
@@ -117,6 +123,17 @@ pub fn update_and_render(
     #[allow(clippy::cast_ptr_alignment)]
     let data = unsafe { &mut *(game_data as *mut GameData) };
     let dt = input.dt;
+
+    if data.tile_info.screen_width_in_px != window_bmp.width() {
+        data.tile_info.screen_height_in_px = window_bmp.width();
+        data.tile_info.screen_width =
+            data.tile_info.screen_height_in_px as f32 / data.tile_info.size as f32;
+    }
+    if data.tile_info.screen_height_in_px != window_bmp.height() {
+        data.tile_info.screen_height_in_px = window_bmp.height();
+        data.tile_info.screen_height =
+            data.tile_info.screen_height_in_px as f32 / data.tile_info.size as f32;
+    }
 
     let info = match data.state {
         GameState::Playing => playing(&mut window_bmp, input, data, dt),
@@ -270,40 +287,39 @@ fn playing(
 
     ///////////////////////////////////////////////////////////////
     /* camera movement */ {
-        let screen_center = v2!(
-            SCREEN_WIDTH_IN_TILES as f32 / 2.0,
-            SCREEN_HEIGHT_IN_TILES as f32 / 2.0,
-        );
+        let screen_center = v2!(data.tile_info.screen_width, data.tile_info.screen_height) * 0.5;
+
+        // camera origin is bottom left corner of a screen
         data.camera_pos = data.player.pos - screen_center;
         clamp(
             &mut data.camera_pos.x,
             0.0,
-            data.tilemap.width() as f32 - SCREEN_WIDTH_IN_TILES,
+            data.tilemap.width() as f32 - data.tile_info.screen_width,
         );
         clamp(
             &mut data.camera_pos.y,
             0.0,
-            data.tilemap.height() as f32 - SCREEN_HEIGHT_IN_TILES,
+            data.tilemap.height() as f32 - data.tile_info.screen_height,
         );
     }
 
     // draw ////////////////////////////////////////////////////////
     render::clear(screen, Color::BLACK);
 
-    data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
+    data.tilemap.draw(screen, data.camera_pos, &data.tile_info);
 
     let bmp = match data.player.facing_direction {
         Direction::Right => &data.player_bmps.right,
         Direction::Left => &data.player_bmps.left,
     };
-    data.player.draw(screen, bmp, data.camera_pos);
+    data.player.draw(screen, bmp, data.camera_pos, data.tile_info.size);
 
     if data.player_attack.health.hp > 0 {
         let bmp = match data.player_attack.facing_direction {
             Direction::Right => &data.player_bmps.attack_right,
             Direction::Left => &data.player_bmps.attack_left,
         };
-        data.player_attack.draw(screen, bmp, data.camera_pos);
+        data.player_attack.draw(screen, bmp, data.camera_pos, data.tile_info.size);
     }
 
     for enemy in &data.enemies {
@@ -314,7 +330,7 @@ fn playing(
         match enemy.health.knockback {
             Knockback::Knocked { time_remaining, .. }
                 if (time_remaining * 20.0).sin() > 0.0 => (),
-            _ => enemy.draw(screen, bmp, data.camera_pos),
+            _ => enemy.draw(screen, bmp, data.camera_pos, data.tile_info.size),
         }
     }
 
@@ -384,7 +400,8 @@ fn level_editor(
         let i: V2i = screen_pos_to_tilemap_pos(
             input.mouse.pos().into(),
             data.camera_pos,
-            screen.dim().into(),
+            screen.dim(),
+            data.tile_info.size,
         )
         .trunc()
         .into();
@@ -397,15 +414,15 @@ fn level_editor(
 
     render::clear(screen, Color::BLACK);
 
-    data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
-    //data.tilemap.draw_grid(screen, data.camera_pos);
-    data.tilemap.draw_outline(screen, data.camera_pos);
+    data.tilemap.draw(screen, data.camera_pos, &data.tile_info);
+    data.tilemap.draw_grid(screen, data.camera_pos, &data.tile_info);
+    data.tilemap.draw_outline(screen, data.camera_pos, &data.tile_info);
 
     let margin = v2!(5, 5);
 
     let tilemap_info = &format!("{}x{}", data.tilemap.width(), data.tilemap.height());
     //TODO: get_bbox method?
-    let min_text_box = v2!(50, 50);
+    let min_text_box = v2!(50);
     let max_text_box = min_text_box
         + v2!(data.font_bmp.width(tilemap_info), data.font_bmp.height())
         + margin * 2;
@@ -423,9 +440,9 @@ fn level_editor(
     data.font_bmp.draw_string(screen, min_text_box + margin, resize_prompt);
 
     // draw yellow outline
-    render::draw_rect(screen, v2!(0, 0), screen.dim().into(), Color::YELLOW, 5);
+    render::draw_rect(screen, v2!(0), screen.dim(), Color::YELLOW, 5);
 
-    format!("{:?}", screen.dim())
+    format!(" camera: {:?}", data.camera_pos)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -511,9 +528,9 @@ impl Entity {
         entity
     }
 
-    pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2f) {
-        let screen_pos = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim());
-        render::draw_bmp(screen, bmp, screen_pos - v2!(TILE_SIZE / 2, TILE_SIZE / 2));
+    pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2f, tile_size: i32) {
+        let screen_pos = tilemap_pos_to_screen_pos(self.pos, camera, screen.dim(), tile_size);
+        render::draw_bmp(screen, bmp, screen_pos - v2!(tile_size / 2));
     }
 
     //TODO: derive consts from height and length of a desired jump

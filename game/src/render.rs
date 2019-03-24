@@ -13,6 +13,10 @@ pub fn fill_rect(dst_bmp: &Bitmap, min: V2i, max: V2i, color: Color) {
 }
 
 pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thickness: i32) {
+    if min.x > dst.width() || min.y > dst.height() || max.x < 0 || max.y < 0 {
+        return
+    }
+
     let draw_left = min.x >= 0;
     let draw_top = min.y >= 0;
     let draw_right = max.x <= dst.width();
@@ -132,9 +136,8 @@ pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: V2i) {
 }
 
 #[inline]
-pub fn clear(dst_bmp: &Bitmap, color: Color) {
-    //FIXME:
-    fill_rect(dst_bmp, v2!(0, 0), dst_bmp.dim().into(), color);
+pub fn clear(dst: &Bitmap, color: Color) {
+    fill_rect(dst, v2!(0, 0), dst.dim(), color);
 }
 
 #[derive(Copy, Clone)]
