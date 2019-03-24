@@ -603,6 +603,7 @@ impl Entity {
                                 };
                                 JUMP_VEL
                             } else {
+                                //FIXME: on uncapped fps this doesn't work
                                 self.vel.y + delta_velocity(GRAVITY.y, dt)
                             };
                             v2!(new_velx, new_vely)
