@@ -46,6 +46,34 @@ impl<T: Num32> V2<T> {
     pub fn new(x: T, y: T) -> Self {
         V2 { x, y }
     }
+
+    pub fn map<F>(self, f: F) -> Self
+        where F: Fn(T) -> T
+    {
+        V2 { x: f(self.x), y: f(self.y) }
+    }
+}
+
+impl V2<f32> {
+    pub fn floor(self) -> Self {
+        Self::map(self, f32::floor)
+    }
+
+    pub fn trunc(mut self) -> Self {
+        Self::map(self, f32::trunc)
+    }
+}
+
+impl From<V2i> for V2f {
+    fn from(v: V2i) -> V2f {
+        v2!(v.x as f32, v.y as f32)
+    }
+}
+
+impl From<V2f> for V2i {
+    fn from(v: V2f) -> V2i {
+        v2!(v.x as i32, v.y as i32)
+    }
 }
 
 impl<T: Num32> From<(T, T)> for V2<T> {

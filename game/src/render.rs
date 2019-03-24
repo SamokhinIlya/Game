@@ -74,8 +74,18 @@ pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thi
     }
 }
 
+// (y - y0) / (y1 - y0) = (x - x0) / (x1 - x0)
+// y = (y1 - y0) / (x1 - x0) * (x - x0) + y0
 pub fn draw_line(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thickness: i32) {
-    unimplemented!()
+    let width = (max.x - min.x) as f32;
+    let height = (max.y - min.y) as f32;
+    let slope = height / width;
+
+    let mut y = min.y;
+    for x in min.x..max.x {
+        dst[(x, y)] = color.into();
+        y += (slope * (x - min.x) as f32).round() as i32;
+    }
 }
 
 pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: V2i) {

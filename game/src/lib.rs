@@ -381,17 +381,24 @@ fn level_editor(
     };
 
     if let Some(tile) = maybe_tile {
-        let tile_pos = screen_pos_to_tilemap_pos(
+        let i: V2i = screen_pos_to_tilemap_pos(
             input.mouse.pos().into(),
             data.camera_pos,
             screen.dim().into(),
-        );
-        let _ = data.tilemap.set(tile_pos.x.trunc() as i32, tile_pos.y.trunc() as i32, tile);
+        )
+        .trunc()
+        .into();
+        if i.x >= 0 && i.x < data.tilemap.width()
+            && i.y >= 0 && i.y < data.tilemap.height()
+        {
+            data.tilemap[(i.x, i.y)] = tile;
+        }
     }
 
     render::clear(screen, Color::BLACK);
 
     data.tilemap.draw(screen, &data.tile_bitmaps, data.camera_pos);
+    //data.tilemap.draw_grid(screen, data.camera_pos);
     data.tilemap.draw_outline(screen, data.camera_pos);
 
     let margin = v2!(5, 5);

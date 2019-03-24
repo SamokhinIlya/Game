@@ -1,6 +1,7 @@
 use std::{
     ptr,
     mem::size_of,
+    ops::{Index, IndexMut}
 };
 use std::mem::uninitialized as uninit;
 use crate::{
@@ -73,7 +74,20 @@ impl Tile {
 pub struct Tilemap {
     width: i32,
     height: i32,
-    pub map: Vec<Tile>,
+    map: Vec<Tile>,
+}
+
+impl Index<(i32, i32)> for Tilemap {
+    type Output = Tile;
+    fn index(&self, (x, y): (i32, i32)) -> &Self::Output {
+        unsafe { &*self.ptr_at(x, y) }
+    }
+}
+
+impl IndexMut<(i32, i32)> for Tilemap {
+    fn index_mut(&mut self, (x, y): (i32, i32)) -> &mut Tile {
+        unsafe { &mut *self.mut_ptr_at(x, y) }
+    }
 }
 
 impl Tilemap {
@@ -95,31 +109,29 @@ impl Tilemap {
     #[inline(always)]
     pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
 
-    //TODO: trait Index
-    pub unsafe fn get_unchecked(&self, x: i32, y: i32) -> Tile {
-        debug_assert!(x >= 0 && x < self.width, y >= 0 && y < self.height);
-        *self.map.get_unchecked((y * self.width + x) as usize)
+    fn check(&self, x: i32, y: i32) {
+        assert!(
+            x >= 0 && x < self.width && y >= 0 && y < self.height,
+            "Tilemap index out of bounds. (w, h): {:?}, (x, y): {:?}",
+            (self.width, self.height), (x, y),
+        );
+    }
+
+    unsafe fn mut_ptr_at(&mut self, x: i32, y: i32) -> *mut Tile {
+        self.check(x, y);
+        self.map.as_mut_ptr().add((y * self.width + x) as usize)
+    }
+
+    unsafe fn ptr_at(&self, x: i32, y: i32) -> *const Tile {
+        self.check(x, y);
+        self.map.as_ptr().add((y * self.width + x) as usize)
     }
 
     pub fn get(&self, x: i32, y: i32) -> Option<Tile> {
         if x >= 0 && x < self.width && y >= 0 && y < self.height {
-            Some(unsafe { self.get_unchecked(x, y) })
+            Some(self[(x, y)])
         } else {
             None
-        }
-    }
-
-    pub unsafe fn set_unchecked(&mut self, x: i32, y: i32, tile: Tile) {
-        debug_assert!(x >= 0 && x < self.width, y >= 0 && y < self.height);
-        *self.map.get_unchecked_mut((y * self.width + x) as usize) = tile;
-    }
-
-    pub fn set(&mut self, x: i32, y: i32, tile: Tile) -> Result<(), ()> {
-        if x >= 0 && x < self.width && y >= 0 && y < self.height {
-            unsafe { self.set_unchecked(x, y, tile) }
-            Ok(())
-        } else {
-            Err(())
         }
     }
 
@@ -157,31 +169,36 @@ impl Tilemap {
 
     pub fn draw(
         &self,
-        dst_bmp: &Bitmap,
+        dst: &Bitmap,
         tile_bitmaps: &[Bitmap],
         camera: V2f,
     ) {
-        for tile_y in (0..=V_DRAW_TILES)
-            .map(|y| camera.y.trunc() as i32 + y)
-            .filter(|&tile_y| tile_y >= 0 && tile_y < self.height)
-        {
-            for tile_x in (0..=H_DRAW_TILES)
-                .map(|x| camera.x.trunc() as i32 + x)
-                .filter(|&tile_x| tile_x >= 0 && tile_x < self.width)
-            {
-                let tile = unsafe { self.get_unchecked(tile_x, tile_y) };
+        use std::cmp::{min, max};
+
+        let camera_i: V2i = camera.floor().into();
+
+        let lower_bound = max(camera_i.y, 0);
+        let upper_bound = min(camera_i.y + V_DRAW_TILES, self.height);
+
+        let left_bound = max(camera_i.x, 0);
+        let right_bound = min(camera_i.x + H_DRAW_TILES, self.width);
+
+        for tile_y in lower_bound..upper_bound {
+            for tile_x in left_bound..right_bound {
+                let tile = self[(tile_x, tile_y)];
                 if !tile.is_visible() { continue }
 
-                let tile_bmp: &Bitmap = get_tile_bmp(tile_bitmaps, tile);
+                let bmp = get_tile_bmp(tile_bitmaps, tile);
                 // TODO: this should be checked somewhere else (on initialization maybe)
-                debug_assert!(tile_bmp.width() == tile_bmp.height());
+                debug_assert!(bmp.width() == bmp.height());
 
                 let V2 { x, y } = tilemap_pos_to_screen_pos(
                     v2!(tile_x as f32, tile_y as f32),
                     camera,
-                    dst_bmp.dim()
+                    dst.dim()
                 );
-                render::draw_bmp(dst_bmp, tile_bmp, v2!(x, y - TILE_SIZE));
+                //dbg!((x, y));
+                render::draw_bmp(dst, bmp, v2!(x, y - TILE_SIZE));
             }
         }
     }
