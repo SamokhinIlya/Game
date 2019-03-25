@@ -1,29 +1,144 @@
+pub mod text;
+
 use utils::clamp;
 use crate::bitmap::Bitmap;
+use crate::vector::{V2, V2i};
 
-pub fn fill_rect(dst_bmp: &Bitmap, p0: (i32, i32), p1: (i32, i32), color: Color) {
-    for row in dst_bmp.clamped_view(p0, p1) {
+pub fn fill_rect(dst_bmp: &Bitmap, min: V2i, max: V2i, color: Color) {
+    for row in dst_bmp.clamped_view(min, max) {
         for pxl in row {
             *pxl = color.into();
         }
     }
 }
 
-pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
+//FIXME: if left or top edge is in bounds,
+//       but same edge + thickness is out of bounds,
+//       function panics
+pub fn draw_rect(
+    dst: &mut Bitmap,
+    mut min: V2i,
+    mut max: V2i,
+    color: Color,
+    thickness: i32,
+) {
+    if min.x >= dst.width() || min.y >= dst.height() || max.x < 1 || max.y < 1 {
+        return
+    }
+
+    let draw_left = min.x >= 0;
+    let draw_top = min.y >= 0;
+    let draw_right = max.x <= dst.width();
+    let draw_bottom = max.y <= dst.height();
+
+    if draw_left && draw_top && draw_right && draw_bottom {
+        for t in 0..thickness {
+            for x in min.x..max.x {
+                dst[(x, min.y + t)] = color.into();
+                dst[(x, max.y - t - 1)] = color.into();
+            }
+            for y in (min.y + 1)..max.y {
+                dst[(min.x + t    , y)] = color.into();
+                dst[(max.x - t - 1, y)] = color.into();
+            }
+        }
+    } else {
+        if !draw_left {
+            min.x = 0;
+        }
+        if !draw_top {
+            min.y = 0;
+        }
+        if !draw_right {
+            max.x = dst.width();
+        }
+        if !draw_bottom {
+            max.y = dst.height();
+        }
+
+        if draw_left {
+            for t in 0..thickness {
+                for y in (min.y + 1)..max.y {
+                    dst[(min.x + t, y)] = color.into();
+                }
+            }
+        }
+        if draw_top {
+            for t in 0..thickness {
+                for x in min.x..max.x {
+                    dst[(x, min.y + t)] = color.into();
+                }
+            }
+        }
+        if draw_right {
+            for t in 0..thickness {
+                for y in (min.y + 1)..max.y {
+                    dst[(max.x - t - 1, y)] = color.into();
+                }
+            }
+        }
+        if draw_bottom {
+            for t in 0..thickness {
+                for x in min.x..max.x {
+                    dst[(x, max.y - t - 1)] = color.into();
+                }
+            }
+        }
+    }
+}
+
+// (y - y0) / (y1 - y0) = (x - x0) / (x1 - x0)
+// y = (y1 - y0) / (x1 - x0) * (x - x0) + y0
+pub fn draw_line(
+    dst: &mut Bitmap,
+    mut min: V2i,
+    mut max: V2i,
+    color: Color,
+    thickness: i32,
+) {
+    //TODO: line clipping
+
+    if min.x > max.x {
+        std::mem::swap(&mut min, &mut max);
+    }
+
+    let width = (max.x - min.x) as f32;
+    let height = (max.y - min.y) as f32;
+    if width > height {
+        let slope = height / width;
+        let mut y = min.y;
+        for x in min.x..max.x {
+            dst[(x, y)] = color.into();
+            y += (slope * (x - min.x) as f32).round() as i32;
+        }
+    } else {
+        let slope = width / height;
+        let mut x = min.x;
+        for y in min.y..max.y {
+            dst[(x, y)] = color.into();
+            x += (slope * (y - min.y) as f32).round() as i32;
+        }
+    }
+}
+
+pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: V2i) {
+    //FIXME:
+    let p: (i32, i32) = p.into();
     let src0 = (
         if p.0 < 0 { -p.0 } else { 0 },
         if p.1 < 0 { -p.1 } else { 0 },
     );
-    let src1 = (src_bmp.width(), src_bmp.height());
+    //FIXME:
+    let src1: (i32, i32) = src_bmp.dim().into();
 
     let dst0 = p;
     let dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);
 
-    let dst_view = dst_bmp.clamped_view(dst0, dst1);
-    let src_view = src_bmp.clamped_view(src0, src1);
+    //FIXME:
+    let dst_view = dst_bmp.clamped_view(dst0.into(), dst1.into());
+    let src_view = src_bmp.clamped_view(src0.into(), src1.into());
     for (dst_row, src_row) in dst_view.zip(src_view) {
         for (dst, src) in dst_row.iter_mut().zip(src_row.iter_mut()) {
-            //FIXME: slow!
             let src_color = *src;
             let dst_color = *dst;
 
@@ -50,79 +165,8 @@ pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: (i32, i32)) {
 }
 
 #[inline]
-pub fn clear(dst_bmp: &Bitmap, color: Color) {
-    fill_rect(dst_bmp, (0, 0), dst_bmp.dim(), color);
-}
-
-use std::collections::HashMap;
-use std::path::Path;
-use crate::file::Load;
-
-//TODO: if height is smaller that 20 letters are barely visible
-pub struct FontBitmaps {
-    characters: HashMap<char, Bitmap>,
-}
-
-impl Load for FontBitmaps {
-    fn load<P>(filepath: P) -> std::io::Result<Self>
-        where P: AsRef<Path>
-    {
-        use rusttype::{point, FontCollection, PositionedGlyph, Scale};
-
-        let font = {
-            let file = crate::file::read_entire_file(filepath)?;
-            let collection = FontCollection::from_bytes(file).unwrap_or_else(|e| {
-                panic!("error constructing a FontCollection from bytes: {}", e);
-            });
-            collection.into_font().unwrap_or_else(|e| {
-                panic!("error turning FontCollection into a Font: {}", e);
-            })
-        };
-
-        const CHAR_HEIGHT: i32 = 20;
-
-        let scale = Scale::uniform(CHAR_HEIGHT as f32);
-
-        // The origin of a line of text is at the baseline (roughly where
-        // non-descending letters sit). We don't want to clip the text, so we shift
-        // it down with an offset when laying it out. v_metrics.ascent is the
-        // distance between the baseline and the highest edge of any glyph in
-        // the font. That's enough to guarantee that there's no clipping.
-        let v_metrics = font.v_metrics(scale);
-        let offset = point(0.0, v_metrics.ascent);
-
-        const ALL_SYMBOLS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,!? ";
-        let glyphs: Vec<PositionedGlyph> = font.layout(ALL_SYMBOLS, scale, offset).collect();
-
-        let mut char_bitmaps = HashMap::new();
-        for (g, ch) in glyphs.iter().zip(ALL_SYMBOLS.chars()) {
-            if let Some(bbox) = g.pixel_bounding_box() {
-                let char_width = bbox.max.x - bbox.min.x;
-                let mut char_bmp = Bitmap::with_dimensions(char_width, CHAR_HEIGHT)
-                    .filled(Color::TRANSPARENT);
-                g.draw(|x, y, v| {
-                    let x = x as usize;
-                    let y = y as usize + (bbox.min.y as usize);
-                    char_bmp[(x, y)] = Color::argb(v, 1.0, 1.0, 1.0).into();
-                });
-                char_bitmaps.insert(ch, char_bmp);
-            }
-        }
-        char_bitmaps.insert(' ', Bitmap::with_dimensions(CHAR_HEIGHT / 2, CHAR_HEIGHT).filled(Color::TRANSPARENT));
-
-        Ok(FontBitmaps { characters: char_bitmaps })
-    }
-}
-
-impl FontBitmaps {
-    pub fn draw_string(&self, dst: &Bitmap, (mut x, y): (i32, i32), string: &str) {
-        for ch in string.chars() {
-            let bmp = self.characters.get(&ch)
-                .unwrap_or_else(|| panic!("No bitmap for character: {}", ch));
-            draw_bmp(dst, bmp, (x, y));
-            x += bmp.width();
-        }
-    }
+pub fn clear(dst: &Bitmap, color: Color) {
+    fill_rect(dst, v2!(0, 0), dst.dim(), color);
 }
 
 #[derive(Copy, Clone)]
@@ -179,6 +223,6 @@ impl Color {
         data: Self::A_MASK | Self::R_MASK | Self::B_MASK,
     };
     pub const GREY: Self = Self {
-        data: Self::A_MASK | 127 | 127 | 127,
+        data: Self::A_MASK | 0x7F << 16 | 0x7F << 8 | 0x7F,
     };
 }
