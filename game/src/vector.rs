@@ -6,20 +6,28 @@ use core::ops::{
     Neg,
 };
 
+pub mod prelude {
+    pub use super::{
+        Num32,
+        V2, V2i, V2f,
+    };
+}
+
 pub trait Num32:
     Sized + Copy + Clone
     + Send + Sync
     + Debug
-    + Add<Output=Self> + AddAssign
-    + Sub<Output=Self> + SubAssign
-    + Mul<Output=Self> + MulAssign
-    + Neg<Output=Self>
+    + PartialEq
+    + Add<Output = Self> + AddAssign
+    + Sub<Output = Self> + SubAssign
+    + Mul<Output = Self> + MulAssign
+    + Neg<Output = Self>
 {}
 
 impl Num32 for i32 {}
 impl Num32 for f32 {}
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct V2<T: Num32> {
     pub x: T,
     pub y: T,
@@ -32,17 +40,61 @@ macro_rules! v2 {
     ($x:expr, $y:expr$(,)*) => {
         V2 { x: $x, y: $y }
     };
+    ($val:expr) => {
+        V2 { x: $val, y: $val }
+    };
 }
 
+//TODO: add const when
+// "trait bounds other than `Sized` on const fn parameters are unstable"
+// is no more
 impl<T: Num32> V2<T> {
     pub fn new(x: T, y: T) -> Self {
         V2 { x, y }
+    }
+
+    pub fn diag(val: T) -> Self {
+        Self::new(val, val)
+    }
+
+    pub fn map<F>(self, f: F) -> Self
+        where F: Fn(T) -> T
+    {
+        Self::new(f(self.x), f(self.y))
+    }
+}
+
+impl V2<f32> {
+    pub fn floor(self) -> Self {
+        Self::map(self, f32::floor)
+    }
+
+    pub fn trunc(self) -> Self {
+        Self::map(self, f32::trunc)
+    }
+}
+
+impl From<V2i> for V2f {
+    fn from(v: V2i) -> V2f {
+        v2!(v.x as f32, v.y as f32)
+    }
+}
+
+impl From<V2f> for V2i {
+    fn from(v: V2f) -> V2i {
+        v2!(v.x as i32, v.y as i32)
     }
 }
 
 impl<T: Num32> From<(T, T)> for V2<T> {
     fn from((x, y): (T, T)) -> Self {
         v2!(x, y)
+    }
+}
+
+impl<T: Num32> Into<(T, T)> for V2<T> {
+    fn into(self) -> (T, T) {
+        (self.x, self.y)
     }
 }
 

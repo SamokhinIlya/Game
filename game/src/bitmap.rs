@@ -6,6 +6,8 @@ use std::{
     slice,
 };
 use crate::file::{Load, read_entire_file};
+use crate::vector::prelude::*;
+use crate::render::Color;
 
 #[derive(Debug)]
 pub struct Bitmap {
@@ -27,7 +29,7 @@ impl Index<(i32, i32)> for Bitmap {
     type Output = u32;
     fn index(&self, (x, y): (i32, i32)) -> &Self::Output {
         unsafe {
-            &*self.data.add((y * self.width + x) as usize)
+            &*self.ptr_mut_at(x as usize, y as usize)
         }
     }
 }
@@ -35,15 +37,16 @@ impl Index<(i32, i32)> for Bitmap {
 impl IndexMut<(i32, i32)> for Bitmap {
     fn index_mut(&mut self, (x, y): (i32, i32)) -> &mut u32 {
         unsafe {
-            &mut *self.data.add((y * self.width + x) as usize)
+            &mut *self.ptr_mut_at(x as usize, y as usize)
         }
     }
 }
 
+
 impl Bitmap {
     pub fn width(&self) -> i32 { self.width }
     pub fn height(&self) -> i32 { self.height }
-    pub fn dim(&self) -> (i32, i32) { (self.width, self.height) }
+    pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
 
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         assert!(width > 0 && height > 0);
@@ -58,31 +61,43 @@ impl Bitmap {
         Self { data, width, height }
     }
 
-    pub fn filled<Color>(self, color: Color) -> Self
-        where Color: Into<u32> + Clone
-    {
+    pub fn filled(self, color: Color) -> Self {
         let slice = unsafe {
             slice::from_raw_parts_mut(self.data, (self.width * self.height) as usize)
         };
-        slice.iter_mut().for_each(|p| *p = color.clone().into());
+        for p in slice {
+            *p = color.into()
+        }
         self
     }
 
-    pub fn clamped_view(&self, mut top_left: (i32, i32), mut bottom_right: (i32, i32)) -> BitmapView {
-        utils::point_clamp(&mut top_left, (0, 0), self.dim());
-        utils::point_clamp(&mut bottom_right, (0, 0), self.dim());
+    pub fn clamped_view(&self, mut top_left: V2i, mut bottom_right: V2i) -> BitmapView {
+        //TODO: rectangle type and contains method
+        utils::clamp(&mut top_left.x, 0, self.width);
+        utils::clamp(&mut top_left.y, 0, self.height);
+        utils::clamp(&mut bottom_right.x, 0, self.width);
+        utils::clamp(&mut bottom_right.y, 0, self.height);
 
         let ptr = unsafe {
-            self.data.add((top_left.1 * self.width + top_left.0) as usize)
+            self.data.add((top_left.y * self.width + top_left.x) as usize)
         };
-        let height = (bottom_right.1 - top_left.1) as isize;
+        let height = (bottom_right.y - top_left.y) as isize;
 
         BitmapView {
             ptr,
             end: unsafe { ptr.offset(height * self.width as isize) },
-            width: (bottom_right.0 - top_left.0) as usize,
+            width: (bottom_right.x - top_left.x) as usize,
             bmp: self,
         }
+    }
+
+    unsafe fn ptr_mut_at(&self, x: usize, y: usize) -> *mut u32 {
+        assert!(
+            x < self.width as usize && y < self.height as usize,
+            "Bitmap index out of bounds. (width, height) = {:?}, (x, y) = {:?}",
+            self.dim(), (x, y), 
+        );
+        self.data.add(y * self.width as usize + x)
     }
 }
 

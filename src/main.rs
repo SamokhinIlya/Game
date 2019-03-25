@@ -72,7 +72,7 @@ fn main() {
         while frame_ms_elapsed < 16.0 {
             frame_ticks_elapsed = frame_counter.elapsed();
             frame_ms_elapsed = frame_ticks_elapsed.as_ms();
-        } 
+        }
         input.dt = frame_ticks_elapsed.as_secs() as f32;
 
         let mut str_buffer: [u8; 256] = unsafe { mem::uninitialized() };
