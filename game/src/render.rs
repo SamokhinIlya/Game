@@ -12,8 +12,17 @@ pub fn fill_rect(dst_bmp: &Bitmap, min: V2i, max: V2i, color: Color) {
     }
 }
 
-pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thickness: i32) {
-    if min.x > dst.width() || min.y > dst.height() || max.x < 0 || max.y < 0 {
+//FIXME: if left or top edge is in bounds,
+//       but same edge + thickness is out of bounds,
+//       function panics
+pub fn draw_rect(
+    dst: &mut Bitmap,
+    mut min: V2i,
+    mut max: V2i,
+    color: Color,
+    thickness: i32,
+) {
+    if min.x >= dst.width() || min.y >= dst.height() || max.x < 1 || max.y < 1 {
         return
     }
 
@@ -80,16 +89,35 @@ pub fn draw_rect(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thi
 
 // (y - y0) / (y1 - y0) = (x - x0) / (x1 - x0)
 // y = (y1 - y0) / (x1 - x0) * (x - x0) + y0
-pub fn draw_line(dst: &mut Bitmap, mut min: V2i, mut max: V2i, color: Color, thickness: i32) {
+pub fn draw_line(
+    dst: &mut Bitmap,
+    mut min: V2i,
+    mut max: V2i,
+    color: Color,
+    thickness: i32,
+) {
     //TODO: line clipping
+
+    if min.x > max.x {
+        std::mem::swap(&mut min, &mut max);
+    }
+
     let width = (max.x - min.x) as f32;
     let height = (max.y - min.y) as f32;
-    let slope = height / width;
-
-    let mut y = min.y;
-    for x in min.x..max.x {
-        dst[(x, y)] = color.into();
-        y += (slope * (x - min.x) as f32).round() as i32;
+    if width > height {
+        let slope = height / width;
+        let mut y = min.y;
+        for x in min.x..max.x {
+            dst[(x, y)] = color.into();
+            y += (slope * (x - min.x) as f32).round() as i32;
+        }
+    } else {
+        let slope = width / height;
+        let mut x = min.x;
+        for y in min.y..max.y {
+            dst[(x, y)] = color.into();
+            x += (slope * (y - min.y) as f32).round() as i32;
+        }
     }
 }
 
@@ -195,6 +223,6 @@ impl Color {
         data: Self::A_MASK | Self::R_MASK | Self::B_MASK,
     };
     pub const GREY: Self = Self {
-        data: Self::A_MASK | 127 | 127 | 127,
+        data: Self::A_MASK | 0x7F << 16 | 0x7F << 8 | 0x7F,
     };
 }

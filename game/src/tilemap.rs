@@ -239,6 +239,9 @@ impl Tilemap {
         use std::cmp::{min, max};
         use utils::clamp;
 
+        let color = render::Color::GREY;
+        let thickness = 1;
+
         let camera_i: V2i = camera.floor().into();
         let v_draw_tiles = info.screen_height.ceil() as i32;
         let h_draw_tiles = info.screen_width.ceil() as i32;
@@ -266,18 +269,34 @@ impl Tilemap {
             );
             clamp(&mut max.x, 0, dst.width());
 
-            render::draw_line(dst, min, max, render::Color::WHITE, 1);
+            render::draw_line(dst, min, max, color, thickness);
         }
 
-        //let left_bound = max(camera_i.x, 0);
-        //let right_bound = min(camera_i.x + h_draw_tiles, self.width - 1);
+        let left_bound = max(camera_i.x, 1);
+        let right_bound = min(camera_i.x + h_draw_tiles + 1, self.width);
 
-        //for tile_x in left_bound..right_bound {
-        //    let x = tile_x * info.size;
-        //    let min = v2!(x, 0);
-        //    let max = v2!(x, self.height * info.size);
-        //    render::draw_line(dst, min, max, render::Color::WHITE, 1);
-        //}
+        for tile_x in left_bound..right_bound {
+            let mut min = tilemap_pos_to_screen_pos(
+                v2!(tile_x, self.height).into(),
+                camera,
+                dst.dim(),
+                info.size,
+            );
+            if min.x < 0 || min.x >= dst.width() {
+                continue;
+            }
+            clamp(&mut min.y, 0, dst.height());
+
+            let mut max = tilemap_pos_to_screen_pos(
+                v2!(tile_x, 0).into(),
+                camera,
+                dst.dim(),
+                info.size,
+            );
+            clamp(&mut max.y, 0, dst.height());
+
+            render::draw_line(dst, min, max, color, thickness);
+        }
     }
 }
 

@@ -400,8 +400,21 @@ fn level_editor(
         && input.mouse.pos().1 >= 0 && input.mouse.pos().1 < screen.height()
     {
         let pos: V2i = input.mouse.pos().into();
-        let text_pos = pos + v2!(5);
+        let margin = v2!(10);
+        let mut text_pos = pos + margin;
+
         let text = format!("{} : {}", mouse.x, mouse.y);
+        let width = data.font_bmp.width(&text);
+        let height = data.font_bmp.height();
+
+        // move textbox, so that it doesn't intersect edges of a screen
+        if text_pos.x + width > screen.width() {
+            text_pos.x = pos.x - width - margin.x;
+        }
+        if text_pos.y + height > screen.height() {
+            text_pos.y = pos.y - height - margin.y;
+        }
+
         Some((text, text_pos))
     } else {
         None
