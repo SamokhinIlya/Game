@@ -44,13 +44,8 @@ impl IndexMut<(i32, i32)> for Bitmap {
 
 
 impl Bitmap {
-    #[inline(always)]
     pub fn width(&self) -> i32 { self.width }
-
-    #[inline(always)]
     pub fn height(&self) -> i32 { self.height }
-
-    #[inline(always)]
     pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
 
     pub fn with_dimensions(width: i32, height: i32) -> Self {

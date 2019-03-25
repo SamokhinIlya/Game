@@ -2,7 +2,7 @@ pub mod text;
 
 use utils::clamp;
 use crate::bitmap::Bitmap;
-use crate::vector::{V2, V2i};
+use crate::vector::prelude::*;
 
 pub fn fill_rect(dst_bmp: &Bitmap, min: V2i, max: V2i, color: Color) {
     for row in dst_bmp.clamped_view(min, max) {

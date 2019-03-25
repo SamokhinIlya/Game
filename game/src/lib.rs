@@ -712,10 +712,10 @@ enum MovementCommand {
 struct Rect2(V2f, V2f);
 
 impl Rect2 {
-    #[inline(always)] pub fn right(self)  -> f32 { self.1.x }
-    #[inline(always)] pub fn left(self)   -> f32 { self.0.x }
-    #[inline(always)] pub fn top(self)    -> f32 { self.1.y }
-    #[inline(always)] pub fn bottom(self) -> f32 { self.0.y }
+    pub fn right(self)  -> f32 { self.1.x }
+    pub fn left(self)   -> f32 { self.0.x }
+    pub fn top(self)    -> f32 { self.1.y }
+    pub fn bottom(self) -> f32 { self.0.y }
     
     pub fn from_bbox(bottom_left: V2f, top_right: V2f) -> Self {
         Self(bottom_left, top_right)
