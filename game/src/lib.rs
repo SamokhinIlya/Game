@@ -174,7 +174,7 @@ fn playing(
                 match enemy.health.knockback {
                     Knockback::No => {
                         enemy.health.hp -= 1;
-                        enemy.health.knockback = Knockback::Knocked{
+                        enemy.health.knockback = Knockback::Knocked {
                             time_remaining: 1.0,
                             just_hit: true,
                         };
