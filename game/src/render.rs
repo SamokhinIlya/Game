@@ -4,7 +4,16 @@ use utils::clamp;
 use crate::bitmap::Bitmap;
 use crate::vector::prelude::*;
 
-pub fn fill_rect(dst_bmp: &Bitmap, min: V2i, max: V2i, color: Color) {
+pub fn fill_rect(dst_bmp: &Bitmap, mut min: V2i, mut max: V2i, color: Color) {
+    use std::mem::swap;
+
+    if min.x > max.x {
+        swap(&mut min.x, &mut max.x)
+    }
+    if min.y > max.y {
+        swap(&mut min.y, &mut max.y)
+    }
+
     for row in dst_bmp.clamped_view(min, max) {
         for pxl in row {
             *pxl = color.into();
@@ -94,49 +103,68 @@ pub fn draw_line(
     mut min: V2i,
     mut max: V2i,
     color: Color,
-    thickness: i32,
+    _thickness: i32,
 ) {
-    //TODO: line clipping
+    //TODO:
+    // line clipping
+    // horizontal and vertical special cases
+    // thickness?
 
-    if min.x > max.x {
-        std::mem::swap(&mut min, &mut max);
-    }
+    use std::mem::swap;
 
     let width = (max.x - min.x) as f32;
     let height = (max.y - min.y) as f32;
-    if width > height {
+    if width.abs() > height.abs() {
+        if width.is_sign_negative() {
+            swap(&mut min, &mut max);
+        }
         let slope = height / width;
+        let derr = slope.abs();
+        let dy = slope.signum() as i32;
+
+        let mut err = 0.0;
         let mut y = min.y;
         for x in min.x..max.x {
             dst[(x, y)] = color.into();
-            y += (slope * (x - min.x) as f32).round() as i32;
+            err += derr;
+            if err >= 0.5 {
+                y += dy;
+                err -= 1.0;
+            }
         }
     } else {
+        if height.is_sign_negative() {
+            swap(&mut min, &mut max);
+        }
         let slope = width / height;
+        let derr = slope.abs();
+        let dx = slope.signum() as i32;
+
+        let mut err = 0.0;
         let mut x = min.x;
         for y in min.y..max.y {
             dst[(x, y)] = color.into();
-            x += (slope * (y - min.y) as f32).round() as i32;
+            err += derr;
+            if err >= 0.5 {
+                x += dx;
+                err -= 1.0;
+            }
         }
     }
 }
 
-pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: V2i) {
-    //FIXME:
-    let p: (i32, i32) = p.into();
-    let src0 = (
-        if p.0 < 0 { -p.0 } else { 0 },
-        if p.1 < 0 { -p.1 } else { 0 },
+pub fn draw_bmp(dst: &Bitmap, src: &Bitmap, p: V2i) {
+    let src0 = v2!(
+        if p.x < 0 { -p.x } else { 0 },
+        if p.y < 0 { -p.y } else { 0 },
     );
-    //FIXME:
-    let src1: (i32, i32) = src_bmp.dim().into();
+    let src1 = src.dim();
 
     let dst0 = p;
-    let dst1 = (dst0.0 + src1.0, dst0.1 + src1.1);
+    let dst1 = dst0 + src1;
 
-    //FIXME:
-    let dst_view = dst_bmp.clamped_view(dst0.into(), dst1.into());
-    let src_view = src_bmp.clamped_view(src0.into(), src1.into());
+    let dst_view = dst.clamped_view(dst0, dst1);
+    let src_view = src.clamped_view(src0, src1);
     for (dst_row, src_row) in dst_view.zip(src_view) {
         for (dst, src) in dst_row.iter_mut().zip(src_row.iter_mut()) {
             let src_color = *src;
@@ -152,7 +180,7 @@ pub fn draw_bmp(dst_bmp: &Bitmap, src_bmp: &Bitmap, p: V2i) {
             let dg: i32 = ((dst_color & Color::G_MASK) >> 8) as i32;
             let db: i32 = (dst_color & Color::B_MASK) as i32;
 
-            //XXX: r = dr + (sr - dr) * acoeff
+            // r = dr + (sr - dr) * acoeff
             let r: u32 = (dr + ((sr - dr) as f32 * acoeff) as i32) as u32;
             let g: u32 = (dg + ((sg - dg) as f32 * acoeff) as i32) as u32;
             let b: u32 = (db + ((sb - db) as f32 * acoeff) as i32) as u32;
@@ -223,6 +251,6 @@ impl Color {
         data: Self::A_MASK | Self::R_MASK | Self::B_MASK,
     };
     pub const GREY: Self = Self {
-        data: Self::A_MASK | 0x7F << 16 | 0x7F << 8 | 0x7F,
+        data: Self::A_MASK | 0x7F7F7F,
     };
 }
