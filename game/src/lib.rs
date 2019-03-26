@@ -578,8 +578,6 @@ impl Entity {
     pub fn mov(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
         use std::ops::Mul;
 
-        //FIXME: guy sticks to ceiling while jumping
-
         const HORIZONTAL_ACC: f32 = 50.0;
         const JUMP_VEL: f32 = 40.0;
         const GRAVITY: V2f = v2!(0.0, -50.0);
@@ -596,8 +594,7 @@ impl Entity {
                 (delta_position(a, self.vel, dt), self.vel + delta_velocity(a, dt))
             },
             MovementCommand::Velocity(new_vel) => {
-                //TODO:             new_vel?   vvvvvvvv
-                (delta_position(v2!(0.0, 0.0), self.vel, dt), new_vel)
+                (delta_position(v2!(0.0, 0.0), new_vel, dt), new_vel)
             },
             MovementCommand::Platformer { dir, jump } => {
                 let base_acc_x = HORIZONTAL_ACC * match dir {

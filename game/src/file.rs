@@ -29,11 +29,10 @@ pub trait Save
 pub fn read_entire_file<P>(filepath: P) -> io::Result<Vec<u8>>
     where P: AsRef<Path>
 {
-    let f = File::open(filepath)?;
     let mut v = Vec::new();
 
     use std::io::Read;
-    BufReader::new(f).read_to_end(&mut v)?;
+    BufReader::new(File::open(filepath)?).read_to_end(&mut v)?;
 
     Ok(v)
 }
@@ -41,7 +40,6 @@ pub fn read_entire_file<P>(filepath: P) -> io::Result<Vec<u8>>
 pub fn write_bytes_to_file<P>(filepath: P, bytes: &[u8]) -> io::Result<()>
     where P: AsRef<Path>
 {
-    //TODO: BufWrite?
     use std::io::Write;
     File::create(filepath)?.write_all(bytes)
 }

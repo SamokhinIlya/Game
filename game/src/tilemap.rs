@@ -200,16 +200,13 @@ impl Tilemap {
                 let tile = self[(tile_x, tile_y)];
                 if !tile.is_visible() { continue }
 
-                let bmp = info.get_bmp(tile);
-                // TODO: this should be checked somewhere else (on initialization maybe)
-                debug_assert!(bmp.width() == bmp.height());
                 let V2 { x, y } = tilemap_pos_to_screen_pos(
                     v2!(tile_x, tile_y).into(),
                     camera,
                     dst.dim(),
                     info.size,
                 );
-                render::draw_bmp(dst, bmp, v2!(x, y - info.size));
+                render::draw_bmp(dst, info.get_bmp(tile), v2!(x, y - info.size));
             }
         }
     }
