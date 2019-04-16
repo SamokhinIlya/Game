@@ -10,6 +10,3 @@ extern crate winapi;
 pub mod graphics;
 pub mod input;
 pub mod time;
-
-pub type RawPtr = *mut Mem;
-pub enum Mem {}

@@ -1,6 +1,6 @@
 use utils::clamp;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Color {
     data: u32,
 }

@@ -9,10 +9,7 @@ mod bitmap;
 mod render;
 mod file;
 
-use platform::{
-    input::{Input, KBKey, MouseKey},
-    RawPtr,
-};
+use platform::input::{Input, KBKey, MouseKey};
 use utils::*;
 use crate::{
     render::Color,
@@ -66,6 +63,9 @@ struct GameData {
     pub enemy_bmp_left: Bitmap,
 
     pub font_bmp: render::text::FontBitmaps,
+
+    pub c: f32,
+    pub col: Color,
 }
 
 struct PlayerBmps {
@@ -75,7 +75,7 @@ struct PlayerBmps {
     pub attack_left: Bitmap,
 }
 
-pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
+pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
         tilemap: Tilemap::load("data/levels/map_00")
@@ -110,15 +110,17 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> RawPtr {
         enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
         enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
         font_bmp: render::text::FontBitmaps::new("data/fonts/Inconsolata-Regular.ttf", 20).unwrap(),
+        c: 0.0,
+        col: Color::WHITE,
     });
 
-    Box::into_raw(result) as RawPtr
+    Box::into_raw(result) as *mut ()
 }
 
 pub fn update_and_render(
     window_buffer: platform::graphics::WindowBuffer,
     input:         &Input,
-    game_data:     RawPtr,
+    game_data:     *mut (),
 ) -> String {
     let mut window_bmp = Bitmap::from(window_buffer);
     #[allow(clippy::cast_ptr_alignment)]
@@ -126,9 +128,9 @@ pub fn update_and_render(
     let dt = input.dt;
 
     if data.tile_info.screen_width_in_px != window_bmp.width() {
-        data.tile_info.screen_height_in_px = window_bmp.width();
+        data.tile_info.screen_width_in_px = window_bmp.width();
         data.tile_info.screen_width =
-            data.tile_info.screen_height_in_px as f32 / data.tile_info.size as f32;
+            data.tile_info.screen_width_in_px as f32 / data.tile_info.size as f32;
     }
     if data.tile_info.screen_height_in_px != window_bmp.height() {
         data.tile_info.screen_height_in_px = window_bmp.height();
@@ -142,6 +144,7 @@ pub fn update_and_render(
     };
 
     std::mem::forget(window_bmp);
+
     info
 }
 
@@ -161,26 +164,23 @@ fn playing(
 
     // attack update ///////////////////////////////////////////////////////////////
     if data.player_attack.health.hp > 0 {
-        for enemy in data.enemies.iter_mut().filter(|x| x.health.hp > 0) {
-            let size = data.player_attack.size;
-            let pos = data.player_attack.pos;
-            let player_attack_hitbox = Rect2::from_bbox(
-                pos + v2!(size.left_offset, size.bottom_offset),
-                pos + v2!(1.0, 0.0) + v2!(size.right_offset, size.top_offset),
-            );
-            let enemy_hurtbox = Rect2::from_center_size(enemy.pos, enemy.size);
+        for enemy in data.enemies.iter_mut() {
+            if enemy.health.hp <= 0 {
+                continue
+            }
+            if !aabb_collision(data.player_attack.rect(), enemy.rect()) {
+                continue
+            }
 
-            if aabb_collision(player_attack_hitbox, enemy_hurtbox) {
-                match enemy.health.knockback {
-                    Knockback::No => {
-                        enemy.health.hp -= 1;
-                        enemy.health.knockback = Knockback::Knocked {
-                            time_remaining: 1.0,
-                            just_hit: true,
-                        };
-                    },
-                    Knockback::Knocked {..} => (),
-                }
+            match enemy.health.knockback {
+                Knockback::No => {
+                    enemy.health.hp -= 1;
+                    enemy.health.knockback = Knockback::Knocked {
+                        time_remaining: 1.0,
+                        just_hit: true,
+                    };
+                },
+                Knockback::Knocked {..} => (),
             }
         }
 
@@ -238,19 +238,22 @@ fn playing(
     // enemy movement //////////////////////////////////////////////////////
     for enemy in data.enemies.iter_mut().filter(|x| x.health.hp > 0) {
         let enemy_command = match enemy.health.knockback {
-            Knockback::No if distance_sq(enemy.pos, data.player.pos) >= 16.0 => {
-                let dir = if enemy.pos.x < data.player.pos.x {
-                    Some(Direction::Right)
-                } else if enemy.pos.x > data.player.pos.x {
-                    Some(Direction::Left)
-                } else {
-                    None
-                };
-                let jump = enemy.pos.y < data.player.pos.y;
+            Knockback::No  => {
+                if distance_sq(enemy.pos, data.player.pos) >= 16.0 {
+                    let dir = if enemy.pos.x < data.player.pos.x {
+                        Some(Direction::Right)
+                    } else if enemy.pos.x > data.player.pos.x {
+                        Some(Direction::Left)
+                    } else {
+                        None
+                    };
+                    let jump = enemy.pos.y < data.player.pos.y;
 
-                MovementCommand::Platformer { dir, jump }
+                    MovementCommand::Platformer { dir, jump }
+                } else {
+                    MovementCommand::Platformer { dir: None, jump: false, }
+                }
             },
-            Knockback::No => MovementCommand::Acceleration(v2!(0.0, 0.0)),
             Knockback::Knocked { time_remaining, just_hit: true } => {
                 enemy.health.knockback = Knockback::Knocked {
                     time_remaining,
@@ -315,6 +318,20 @@ fn playing(
     };
     data.player.draw(screen, bmp, data.camera_pos, data.tile_info.size);
 
+    let rect = data.player.rect();
+    let min = tilemap_pos_to_screen_pos(rect.min, data.camera_pos, screen.dim(), data.tile_info.size);
+    let max = tilemap_pos_to_screen_pos(rect.max, data.camera_pos, screen.dim(), data.tile_info.size);
+    data.c += dt;
+    if data.c > 0.2 {
+        data.c = 0.0;
+        data.col = match data.col {
+            Color::WHITE => Color::BLACK,
+            Color::BLACK => Color::WHITE,
+            _ => unreachable!(),
+        };
+    }
+    render::draw_rect(screen, v2!(min.x, max.y), v2!(max.x, min.y), data.col, 1);
+
     if data.player_attack.health.hp > 0 {
         let bmp = match data.player_attack.facing_direction {
             Direction::Right => &data.player_bmps.attack_right,
@@ -333,9 +350,13 @@ fn playing(
                 if (time_remaining * 20.0).sin() > 0.0 => (),
             _ => enemy.draw(screen, bmp, data.camera_pos, data.tile_info.size),
         }
+        let rect = enemy.rect();
+        let min = tilemap_pos_to_screen_pos(rect.min, data.camera_pos, screen.dim(), data.tile_info.size);
+        let max = tilemap_pos_to_screen_pos(rect.max, data.camera_pos, screen.dim(), data.tile_info.size);
+        render::draw_rect(screen, v2!(min.x, max.y), v2!(max.x, min.y), Color::WHITE, 1);
     }
 
-    format!(" {}", data.player)
+    format!(" {}", data.enemies[0])
 }
 
 #[allow(clippy::useless_format)]
@@ -487,30 +508,13 @@ fn level_editor(
 }
 
 #[derive(Copy, Clone, Debug)]
-struct Size {
-    pub top_offset: f32,
-    pub bottom_offset: f32,
-    pub right_offset: f32,
-    pub left_offset: f32,
-}
-
-impl Size {
-    pub fn with_symmetric_offset(offset: V2f) -> Self {
-        Self {
-            top_offset: offset.y,
-            bottom_offset: -offset.y,
-            right_offset: offset.x,
-            left_offset: -offset.x,
-        }
-    }
-}
-
-//TODO: Size -> Rect2
-#[derive(Copy, Clone, Debug)]
 struct Entity {
     pub pos: V2f,
     pub vel: V2f,
-    pub size: Size,
+
+    pub bottom_left_offset: V2f,
+    pub size: V2f,
+
     pub facing_direction: Direction,
     pub health: Health,
     pub movement_state: MovementState,
@@ -550,16 +554,23 @@ impl Entity {
         Self {
             pos: v2!(1.5, 1.5),
             vel: v2!(0.0, 0.0),
-            size: Size {
-                top_offset:      0.5 - 1.0 / 9.0,
-                bottom_offset: -(0.5 - 0.001),
-                right_offset:    0.5 - 1.0 / 8.0,
-                left_offset:   -(0.5 - 1.0 / 8.0),
-            },
+
+            // TODO: something about this hardcoding
+            bottom_left_offset: v2!(-(0.75 * 0.5), -(0.5 - 0.001)),
+            size: v2!(0.75, (0.5 - 0.001) + (0.5 - 1.0 / 9.0)),
+
             health: Health { hp: 1, knockback: Knockback::No },
             facing_direction: Direction::Right,
             movement_state: MovementState::InTheAir { jumped_again: true },
         }
+    }
+
+    pub fn rect(&self) -> Rect2 {
+        let bottom_left = self.pos + self.bottom_left_offset;
+        Rect2::from_bbox(
+            bottom_left,
+            bottom_left + self.size,
+        )
     }
 
     pub fn with_pos_health(pos: V2f, hp: i32) -> Self {
@@ -576,23 +587,36 @@ impl Entity {
 
     //TODO: derive consts from height and length of a desired jump
     pub fn mov(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
-        use std::ops::Mul;
+        use std::ops::{Add, Mul};
 
         const HORIZONTAL_ACC: f32 = 50.0;
         const JUMP_VEL: f32 = 40.0;
         const GRAVITY: V2f = v2!(0.0, -50.0);
 
-        fn friction(vel: f32) -> f32 { vel * -8.0 }
-        fn delta_position(acc: V2f, vel: V2f, dt: f32) -> V2f { 0.5 * acc * dt*dt + vel * dt }
-        fn delta_velocity<T>(acc: T, dt: f32) -> T where T: Mul<f32, Output=T> {
+        fn friction(vel: f32) -> f32 {
+            vel * -8.0
+        }
+
+        fn delta_position<T>(acc: T, vel: T, dt: f32) -> T
+            where T: Mul<f32, Output=T> + Add<Output=T>,
+                  f32: Mul<T, Output=T>,
+        {
+            0.5 * acc * dt*dt + vel * dt
+        }
+
+        fn delta_velocity<T>(acc: T, dt: f32) -> T
+            where T: Mul<f32, Output=T>
+        {
             acc * dt
         }
 
         let (V2 { x: mut dx, y: mut dy }, mut new_vel) = match command {
-            MovementCommand::Acceleration(a) => {
-                let a = a + v2!(friction(self.vel.x), 0.0) + GRAVITY;
+            // TODO: do different things based on MovementState
+            MovementCommand::Acceleration(mut a) => {
+                a += v2!(friction(self.vel.x), 0.0);
                 (delta_position(a, self.vel, dt), self.vel + delta_velocity(a, dt))
             },
+            // TODO: do different things based on MovementState
             MovementCommand::Velocity(new_vel) => {
                 (delta_position(v2!(0.0, 0.0), new_vel, dt), new_vel)
             },
@@ -605,22 +629,23 @@ impl Entity {
                 match self.movement_state {
                     MovementState::OnTheGround => {
                         let acc_x = base_acc_x + friction(self.vel.x);
-                        let new_vel = {
-                            let new_velx = self.vel.x + delta_velocity(acc_x, dt);
-                            let new_vely = if jump {
-                                self.movement_state = MovementState::InTheAir {
-                                    jumped_again: false,
-                                };
-                                JUMP_VEL
-                            } else {
-                                //FIXME: on uncapped fps this doesn't work
-                                self.vel.y + delta_velocity(GRAVITY.y, dt)
+                        let new_velx = self.vel.x + delta_velocity(acc_x, dt);
+                        if jump {
+                            self.movement_state = MovementState::InTheAir {
+                                jumped_again: false,
                             };
-                            v2!(new_velx, new_vely)
-                        };
-                        let acc = v2!(acc_x, 0.0);
 
-                        (delta_position(acc, self.vel, dt), new_vel)
+                            (
+                                delta_position(v2!(acc_x, 0.0), self.vel, dt),
+                                v2!(new_velx, JUMP_VEL),
+                            )
+                        } else {
+                            (
+                                // -0.01 is for checking if there is a tile underneath
+                                v2!(delta_position(acc_x, self.vel.x, dt), -0.01),
+                                v2!(new_velx, 0.0),
+                            )
+                        }
                     },
                     MovementState::InTheAir { jumped_again: false } if jump => {
                         self.movement_state = MovementState::InTheAir {
@@ -654,9 +679,9 @@ impl Entity {
             if let Some(tile_x) = h_tilemap_collision(self, tilemap, dx).map(|x| x as f32) {
                 new_vel.x = 0.0;
                 dx = if dx > 0.0 {
-                    tile_x         - self.pos.x - self.size.right_offset * 1.01
+                    tile_x - self.pos.x - (self.size.x + self.bottom_left_offset.x) * 1.01
                 } else {
-                    (tile_x + 1.0) - self.pos.x - self.size.left_offset  * 1.01
+                    tile_x + 1.0 - self.pos.x - self.bottom_left_offset.x * 1.01
                 }
             }
         }
@@ -666,10 +691,10 @@ impl Entity {
             if let Some(tile_y) = v_tilemap_collision(self, tilemap, dy).map(|y| y as f32) {
                 new_vel.y = 0.0;
                 dy = if dy > 0.0 {
-                    tile_y         - self.pos.y - self.size.top_offset    * 1.01
+                    tile_y - self.pos.y - (self.size.y + self.bottom_left_offset.y) * 1.01
                 } else {
                     self.movement_state = MovementState::OnTheGround;
-                    (tile_y + 1.0) - self.pos.y - self.size.bottom_offset * 1.01
+                    tile_y + 1.0 - self.pos.y - self.bottom_left_offset.y * 1.01
                 }
             } else if let MovementState::OnTheGround = self.movement_state {
                 self.movement_state = MovementState::InTheAir { jumped_again: false };
@@ -686,9 +711,9 @@ impl Entity {
 impl std::fmt::Display for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let airborne = match self.movement_state {
-            MovementState::OnTheGround => "_",
+            MovementState::OnTheGround                      => "_",
             MovementState::InTheAir { jumped_again: false } => "-",
-            MovementState::InTheAir { jumped_again: true } => "^",
+            MovementState::InTheAir { jumped_again: true }  => "^",
         };
         write!(
             f,
@@ -706,48 +731,52 @@ enum MovementCommand {
 }
 
 #[derive(Copy, Clone, Debug)]
-struct Rect2(V2f, V2f);
+struct Rect2 {
+    pub min: V2f,
+    pub max: V2f,
+}
 
 impl Rect2 {
-    pub fn right(self)  -> f32 { self.1.x }
-    pub fn left(self)   -> f32 { self.0.x }
-    pub fn top(self)    -> f32 { self.1.y }
-    pub fn bottom(self) -> f32 { self.0.y }
+    pub fn right(self)  -> f32 { self.max.x }
+    pub fn left(self)   -> f32 { self.min.x }
+    pub fn top(self)    -> f32 { self.max.y }
+    pub fn bottom(self) -> f32 { self.min.y }
     
     pub fn from_bbox(bottom_left: V2f, top_right: V2f) -> Self {
-        Self(bottom_left, top_right)
-    }
-
-    pub fn from_center_size(center: V2f, size: Size) -> Self {
-        Self(
-            v2!(center.x + size.left_offset, center.y + size.bottom_offset),
-            v2!(center.x + size.right_offset, center.y + size.top_offset),
-        )
+        Self {
+            min: bottom_left,
+            max: top_right,
+        }
     }
 }
 
 fn aabb_collision(rect0: Rect2, rect1: Rect2) -> bool {
-    rect0.right() > rect1.left() && rect0.left() < rect1.right()
-        && rect0.top() > rect1.bottom() && rect0.bottom() < rect1.top()
+    rect0.right() > rect1.left()
+        && rect0.left() < rect1.right()
+        && rect0.top() > rect1.bottom()
+        && rect0.bottom() < rect1.top()
 }
 
 fn h_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dx: f32) -> Option<i32> {
-    let u_tile_y = (entity.pos.y + entity.size.top_offset   ).floor() as i32;
-    let d_tile_y = (entity.pos.y + entity.size.bottom_offset).floor() as i32;
+    assert_ne!(dx, 0.0, "Collision dx");
+
+    let u_tile_y = (entity.pos.y + entity.size.y + entity.bottom_left_offset.y).floor() as i32;
+    let d_tile_y = (entity.pos.y + entity.bottom_left_offset.y           ).floor() as i32;
 
     let (offset, step_x) = if dx > 0.0 {
-        (entity.size.right_offset, 1)
+        (entity.size.x + entity.bottom_left_offset.x, 1)
     } else {
-        (entity.size.left_offset, -1)
+        (entity.bottom_left_offset.x, -1)
     };
     let from_x = (entity.pos.x + offset).floor() as i32;
     let to_x = (entity.pos.x + offset + dx).floor() as i32;
 
     let mut tile_x = from_x;
     loop {
-        match (tilemap.get(tile_x, u_tile_y),
-               tilemap.get(tile_x, d_tile_y)) 
-        {
+        match (
+            tilemap.get(tile_x, u_tile_y),
+            tilemap.get(tile_x, d_tile_y),
+        ) {
             (Some(up), Some(dn)) if up.is_obstacle() || dn.is_obstacle() =>
                 return Some(tile_x),
             (None, _   ) |
@@ -756,29 +785,35 @@ fn h_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dx: f32) -> Option<i3
             _ => (),
         }
 
-        if tile_x == to_x { break }
+        if tile_x == to_x {
+            break
+        }
         tile_x += step_x;
     }
+
     None
 }
 
 fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i32> {
-    let r_tile_x = (entity.pos.x + entity.size.right_offset).floor() as i32;
-    let l_tile_x = (entity.pos.x + entity.size.left_offset ).floor() as i32;
+    assert_ne!(dy, 0.0, "Collision dy");
+
+    let r_tile_x = (entity.pos.x + entity.size.x + entity.bottom_left_offset.x).floor() as i32;
+    let l_tile_x = (entity.pos.x + entity.bottom_left_offset.x).floor() as i32;
 
     let (offset, step_y) = if dy > 0.0 {
-        (entity.size.top_offset, 1)
+        (entity.size.y + entity.bottom_left_offset.y, 1)
     } else {
-        (entity.size.bottom_offset, -1)
+        (entity.bottom_left_offset.y, -1)
     };
     let from_y = (entity.pos.y + offset).floor() as i32;
     let to_y = (entity.pos.y + offset + dy).floor() as i32;
 
     let mut tile_y = from_y;
     loop {
-        match (tilemap.get(r_tile_x, tile_y),
-               tilemap.get(l_tile_x, tile_y)) 
-        {
+        match (
+            tilemap.get(r_tile_x, tile_y),
+            tilemap.get(l_tile_x, tile_y),
+        ) {
             (Some(rt), Some(lt)) if rt.is_obstacle() || lt.is_obstacle() =>
                 return Some(tile_y),
             (None, _   ) |
@@ -787,8 +822,11 @@ fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i3
             _ => (),
         }
 
-        if tile_y == to_y { break }
+        if tile_y == to_y {
+            break
+        }
         tile_y += step_y;
     }
+
     None
 }

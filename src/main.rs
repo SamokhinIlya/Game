@@ -66,21 +66,20 @@ fn main() {
 
         window.blit(window_bmp);
 
-        //TODO: wait a bit
-        let mut frame_ticks_elapsed = frame_counter.elapsed();
-        let mut frame_ms_elapsed = frame_ticks_elapsed.as_ms();
-        while frame_ms_elapsed < 16.0 {
-            frame_ticks_elapsed = frame_counter.elapsed();
-            frame_ms_elapsed = frame_ticks_elapsed.as_ms();
-        }
+        let frame_ticks_elapsed = frame_counter.elapsed();
+        let frame_ms_elapsed = frame_ticks_elapsed.as_ms();
         input.dt = frame_ticks_elapsed.as_secs() as f32;
 
         let mut str_buffer: [u8; 256] = unsafe { mem::uninitialized() };
         use std::io::Write;
         write!(
             &mut str_buffer as &mut [u8],
-            "frame: {:>3.3} ms, game_update: {:>3.3} ms, {:>2.2} fps, dt: {} sec{}\0",
-            frame_ms_elapsed, game_update_ms_elapsed, frame_ticks_elapsed.as_secs().recip(), input.dt, game_info,
+            "frame: {:>3.3} ms, game_update: {:>3.3} ms, {:>2.2} fps, dt: {:>3.3} ms{}\0",
+            frame_ms_elapsed,
+            game_update_ms_elapsed,
+            frame_ticks_elapsed.as_secs().recip(),
+            input.dt * 1000.0,
+            game_info,
         ).unwrap();
         window.set_title(&str_buffer);
     }
