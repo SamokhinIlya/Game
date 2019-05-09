@@ -124,7 +124,9 @@ pub fn update_and_render(
 ) -> String {
     let mut window_bmp = Bitmap::from(window_buffer);
     #[allow(clippy::cast_ptr_alignment)]
-    let data = unsafe { &mut *(game_data as *mut GameData) };
+    let data = unsafe {
+        &mut *(game_data as *mut GameData)
+    };
     let dt = input.dt;
 
     if data.tile_info.screen_width_in_px != window_bmp.width() {
@@ -356,7 +358,7 @@ fn playing(
         render::draw_rect(screen, v2!(min.x, max.y), v2!(max.x, min.y), Color::WHITE, 1);
     }
 
-    format!(" {}", data.enemies[0])
+    format!(" {}", data.player)
 }
 
 #[allow(clippy::useless_format)]
@@ -508,19 +510,6 @@ fn level_editor(
 }
 
 #[derive(Copy, Clone, Debug)]
-struct Entity {
-    pub pos: V2f,
-    pub vel: V2f,
-
-    pub bottom_left_offset: V2f,
-    pub size: V2f,
-
-    pub facing_direction: Direction,
-    pub health: Health,
-    pub movement_state: MovementState,
-}
-
-#[derive(Copy, Clone, Debug)]
 enum Direction {
     Left,
     Right,
@@ -545,6 +534,19 @@ enum Knockback {
         time_remaining: f32,
         just_hit: bool,
     },
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Entity {
+    pub pos: V2f,
+    pub vel: V2f,
+
+    pub bottom_left_offset: V2f,
+    pub size: V2f,
+
+    pub facing_direction: Direction,
+    pub health: Health,
+    pub movement_state: MovementState,
 }
 
 impl Entity {
@@ -585,8 +587,113 @@ impl Entity {
         render::draw_bmp(screen, bmp, screen_pos - v2!(tile_size / 2));
     }
 
-    //TODO: derive consts from height and length of a desired jump
     pub fn mov(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
+        self.mov_new(tilemap, command, dt);
+    }
+
+    pub fn mov_new(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
+        match command {
+            MovementCommand::Platformer { dir, jump } => {
+                fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
+                    match (tile0, tile1) {
+                        (Some(Tile::Empty), Some(Tile::Empty)) => false,
+                        _ => true,
+                    }
+                }
+
+                const ACC_X: f32 = 100.0;
+
+                let mut new_vel_x = match dir {
+                    Some(dir) => {
+                        let acc_x = match dir {
+                            Direction::Left => -ACC_X - self.vel.x,
+                            Direction::Right => ACC_X - self.vel.x,
+                        };
+                        self.vel.x + 0.5 * acc_x * dt
+                    },
+                    None => self.vel.x * 0.1,
+                };
+                let mut new_pos_x = self.pos.x + self.vel.x * dt;
+
+                let dx = new_pos_x - self.pos.x;
+                if dx != 0.0 {
+                    let top_y = self.pos.y + self.bottom_left_offset.y + self.size.y;
+                    let bottom_y = top_y - self.size.y;
+
+                    if dx > 0.0 {
+                        let right_x = (new_pos_x + self.bottom_left_offset.x + self.size.x).floor() as i32;
+
+                        let top_right_tile = tilemap.get(right_x, top_y.trunc() as i32);
+                        let bottom_right_tile = tilemap.get(right_x, bottom_y.trunc() as i32);
+
+                        if is_obstacle(top_right_tile, bottom_right_tile) {
+                            new_vel_x = 0.0;
+                            new_pos_x = right_x as f32 - (self.bottom_left_offset.x + self.size.x + 0.01);
+                        }
+                    } else if dx < 0.0 {
+                        let left_x = (new_pos_x + self.bottom_left_offset.x).floor() as i32;
+
+                        let top_left_tile = tilemap.get(left_x, top_y.trunc() as i32);
+                        let bottom_left_tile = tilemap.get(left_x, bottom_y.trunc() as i32);
+
+                        if is_obstacle(top_left_tile, bottom_left_tile) {
+                            new_vel_x = 0.0;
+                            new_pos_x = (left_x + 1) as f32 - self.bottom_left_offset.x + 0.01;
+                        }
+                    }
+                }
+
+                self.pos.x = new_pos_x;
+                self.vel.x = new_vel_x;
+
+
+                const GRAVITY_ACC: f32 = -100.0;
+                const JUMP_VEL: f32 = 15.0;
+
+                let mut new_vel_y = match jump {
+                    false => self.vel.y + 0.5 * GRAVITY_ACC * dt,
+                    true => JUMP_VEL,
+                };
+                let mut new_pos_y = self.pos.y + self.vel.y * dt;
+
+                let dy = new_pos_y - self.pos.y;
+                if dy != 0.0 {
+                    let left_x = self.pos.x + self.bottom_left_offset.x;
+                    let right_x = left_x + self.size.x;
+
+                    if dy > 0.0 {
+                        let top_y = (new_pos_y + self.bottom_left_offset.y + self.size.y).floor() as i32;
+
+                        let top_left_tile = tilemap.get(left_x.trunc() as i32, top_y);
+                        let top_right_tile = tilemap.get(right_x.trunc() as i32, top_y);
+
+                        if is_obstacle(top_left_tile, top_right_tile) {
+                            new_vel_y = 0.0;
+                            new_pos_y = top_y as f32 - (self.bottom_left_offset.y + self.size.y + 0.01);
+                        }
+
+                    } else if dy < 0.0 {
+                        let bottom_y = (new_pos_y + self.bottom_left_offset.y).floor() as i32;
+
+                        let bottom_left_tile = tilemap.get(left_x.trunc() as i32, bottom_y);
+                        let bottom_right_tile = tilemap.get(right_x.trunc() as i32, bottom_y);
+
+                        if is_obstacle(bottom_left_tile, bottom_right_tile) {
+                            new_vel_y = 0.0;
+                            new_pos_y = (bottom_y + 1) as f32 - self.bottom_left_offset.y + 0.01;
+                        }
+                    }
+                }
+
+                self.pos.y = new_pos_y;
+                self.vel.y = new_vel_y;
+            },
+            _ => (),
+        }
+    }
+
+    //TODO: derive consts from height and length of a desired jump
+    pub fn mov_old(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
         use std::ops::{Add, Mul};
 
         const HORIZONTAL_ACC: f32 = 50.0;
@@ -741,7 +848,12 @@ impl Rect2 {
     pub fn left(self)   -> f32 { self.min.x }
     pub fn top(self)    -> f32 { self.max.y }
     pub fn bottom(self) -> f32 { self.min.y }
-    
+
+    pub fn top_left(self)     -> V2f { v2!(self.min.x, self.max.y) }
+    pub fn top_right(self)    -> V2f { self.max }
+    pub fn bottom_left(self)  -> V2f { self.min }
+    pub fn bottom_right(self) -> V2f { v2!(self.max.x, self.min.y) }
+
     pub fn from_bbox(bottom_left: V2f, top_right: V2f) -> Self {
         Self {
             min: bottom_left,

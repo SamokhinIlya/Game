@@ -54,6 +54,6 @@ impl Color {
         data: Self::A_MASK | Self::R_MASK | Self::B_MASK,
     };
     pub const GREY: Self = Self {
-        data: Self::A_MASK | 0x7F7F7F,
+        data: Self::A_MASK | 0x007F_7F7F,
     };
 }
