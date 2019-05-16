@@ -1,7 +1,3 @@
-extern crate core;
-extern crate utils;
-extern crate rusttype;
-
 #[macro_use]
 mod vector;
 mod tilemap;
@@ -297,13 +293,13 @@ fn playing(
 
         // camera origin is bottom left corner of a screen
         data.camera_pos = data.player.pos - screen_center;
-        clamp(
-            &mut data.camera_pos.x,
+        data.camera_pos.x = clamp(
+            data.camera_pos.x,
             0.0,
             data.tilemap.width() as f32 - data.tile_info.screen_width,
         );
-        clamp(
-            &mut data.camera_pos.y,
+        data.camera_pos.y = clamp(
+            data.camera_pos.y,
             0.0,
             data.tilemap.height() as f32 - data.tile_info.screen_height,
         );
@@ -412,17 +408,19 @@ fn level_editor(
         }
     }
 
+    let mouse_pos = input.mouse.pos();
+
     let mouse: V2i = screen_pos_to_tilemap_pos(
-        input.mouse.pos().into(),
+        mouse_pos.into(),
         data.camera_pos,
         screen.dim(),
         data.tile_info.size,
     ).trunc().into();
 
-    let mouse_pos_textbox = if input.mouse.pos().0 >= 0 && input.mouse.pos().0 < screen.width()
-        && input.mouse.pos().1 >= 0 && input.mouse.pos().1 < screen.height()
+    let mouse_pos_textbox = if in_range(mouse_pos.0, 0..screen.width())
+        && in_range(mouse_pos.1, 0..screen.height())
     {
-        let pos: V2i = input.mouse.pos().into();
+        let pos: V2i = mouse_pos.into();
         let margin = v2!(10);
         let mut text_pos = pos + margin;
 
@@ -452,8 +450,8 @@ fn level_editor(
     };
 
     if let Some(tile) = maybe_tile {
-        if mouse.x >= 0 && mouse.x < data.tilemap.width()
-            && mouse.y >= 0 && mouse.y < data.tilemap.height()
+        if in_range(mouse.x, 0..data.tilemap.width())
+            && in_range(mouse.y, 0..data.tilemap.height())
         {
             data.tilemap[(mouse.x, mouse.y)] = tile;
         }
@@ -550,8 +548,6 @@ struct Entity {
 }
 
 impl Entity {
-    const MAX_VELOCITY: V2f = v2!(6.0, 13.0);
-
     pub fn new() -> Self {
         Self {
             pos: v2!(1.5, 1.5),
@@ -588,10 +584,6 @@ impl Entity {
     }
 
     pub fn mov(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
-        self.mov_new(tilemap, command, dt);
-    }
-
-    pub fn mov_new(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
         match command {
             MovementCommand::Platformer { dir, jump } => {
                 fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
@@ -601,17 +593,27 @@ impl Entity {
                     }
                 }
 
-                const ACC_X: f32 = 100.0;
+                use MovementState::{OnTheGround, InTheAir};
+                use Direction::{Left, Right};
 
-                let mut new_vel_x = match dir {
-                    Some(dir) => {
-                        let acc_x = match dir {
-                            Direction::Left => -ACC_X - self.vel.x,
-                            Direction::Right => ACC_X - self.vel.x,
-                        };
-                        self.vel.x + 0.5 * acc_x * dt
-                    },
-                    None => self.vel.x * 0.1,
+                const ACC_X: f32 = 100.0;
+                const MAX_VEL_X: f32 = 10.0;
+
+                // TODO: ground and air friction
+                let mut new_vel_x = {
+                    let mut acc_x = match dir {
+                        Some(Left) => -ACC_X,
+                        Some(Right) => ACC_X,
+                        None => 0.0,
+                    };
+                    acc_x += match self.movement_state {
+                        // friction
+                        OnTheGround => -self.vel.x * 12.0,
+                        // air movement penalty
+                        InTheAir { .. } => -acc_x * 0.8,
+                    };
+
+                    self.vel.x + 0.5 * acc_x * dt
                 };
                 let mut new_pos_x = self.pos.x + self.vel.x * dt;
 
@@ -623,8 +625,8 @@ impl Entity {
                     if dx > 0.0 {
                         let right_x = (new_pos_x + self.bottom_left_offset.x + self.size.x).floor() as i32;
 
-                        let top_right_tile = tilemap.get(right_x, top_y.trunc() as i32);
-                        let bottom_right_tile = tilemap.get(right_x, bottom_y.trunc() as i32);
+                        let top_right_tile = tilemap.get(right_x, top_y.floor() as i32);
+                        let bottom_right_tile = tilemap.get(right_x, bottom_y.floor() as i32);
 
                         if is_obstacle(top_right_tile, bottom_right_tile) {
                             new_vel_x = 0.0;
@@ -633,8 +635,8 @@ impl Entity {
                     } else if dx < 0.0 {
                         let left_x = (new_pos_x + self.bottom_left_offset.x).floor() as i32;
 
-                        let top_left_tile = tilemap.get(left_x, top_y.trunc() as i32);
-                        let bottom_left_tile = tilemap.get(left_x, bottom_y.trunc() as i32);
+                        let top_left_tile = tilemap.get(left_x, top_y.floor() as i32);
+                        let bottom_left_tile = tilemap.get(left_x, bottom_y.floor() as i32);
 
                         if is_obstacle(top_left_tile, bottom_left_tile) {
                             new_vel_x = 0.0;
@@ -644,15 +646,32 @@ impl Entity {
                 }
 
                 self.pos.x = new_pos_x;
-                self.vel.x = new_vel_x;
+                self.vel.x = clamp(new_vel_x, -MAX_VEL_X, MAX_VEL_X);
 
+                // ground check //////////
+                if let OnTheGround = self.movement_state {
+                    match tilemap.get(self.pos.x.floor() as i32, self.pos.y.floor() as i32 - 1) {
+                        Some(Tile::Empty) => self.movement_state = InTheAir { jumped_again: false },
+                        _ => (),
+                    }
+                }
+                // ground check //////////
 
                 const GRAVITY_ACC: f32 = -100.0;
                 const JUMP_VEL: f32 = 15.0;
+                const MAX_VEL_Y: f32 = 30.0;
 
-                let mut new_vel_y = match jump {
-                    false => self.vel.y + 0.5 * GRAVITY_ACC * dt,
-                    true => JUMP_VEL,
+                let mut new_vel_y = match self.movement_state {
+                    OnTheGround if jump => {
+                        self.movement_state = InTheAir { jumped_again: false };
+                        JUMP_VEL
+                    },
+                    InTheAir { jumped_again: false } if jump => {
+                        self.movement_state = InTheAir { jumped_again: true };
+                        JUMP_VEL
+                    },
+                    OnTheGround => 0.0,
+                    _ => self.vel.y + 0.5 * GRAVITY_ACC * dt,
                 };
                 let mut new_pos_y = self.pos.y + self.vel.y * dt;
 
@@ -664,163 +683,44 @@ impl Entity {
                     if dy > 0.0 {
                         let top_y = (new_pos_y + self.bottom_left_offset.y + self.size.y).floor() as i32;
 
-                        let top_left_tile = tilemap.get(left_x.trunc() as i32, top_y);
-                        let top_right_tile = tilemap.get(right_x.trunc() as i32, top_y);
+                        let top_left_tile = tilemap.get(left_x.floor() as i32, top_y);
+                        let top_right_tile = tilemap.get(right_x.floor() as i32, top_y);
 
                         if is_obstacle(top_left_tile, top_right_tile) {
                             new_vel_y = 0.0;
                             new_pos_y = top_y as f32 - (self.bottom_left_offset.y + self.size.y + 0.01);
                         }
-
                     } else if dy < 0.0 {
                         let bottom_y = (new_pos_y + self.bottom_left_offset.y).floor() as i32;
 
-                        let bottom_left_tile = tilemap.get(left_x.trunc() as i32, bottom_y);
-                        let bottom_right_tile = tilemap.get(right_x.trunc() as i32, bottom_y);
+                        let bottom_left_tile = tilemap.get(left_x.floor() as i32, bottom_y);
+                        let bottom_right_tile = tilemap.get(right_x.floor() as i32, bottom_y);
 
                         if is_obstacle(bottom_left_tile, bottom_right_tile) {
                             new_vel_y = 0.0;
                             new_pos_y = (bottom_y + 1) as f32 - self.bottom_left_offset.y + 0.01;
+
+                            // hit the floor -> now on the ground
+                            self.movement_state = OnTheGround;
                         }
                     }
                 }
 
                 self.pos.y = new_pos_y;
-                self.vel.y = new_vel_y;
+                self.vel.y = clamp(new_vel_y, -MAX_VEL_Y, MAX_VEL_Y);
             },
             _ => (),
         }
-    }
-
-    //TODO: derive consts from height and length of a desired jump
-    pub fn mov_old(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
-        use std::ops::{Add, Mul};
-
-        const HORIZONTAL_ACC: f32 = 50.0;
-        const JUMP_VEL: f32 = 40.0;
-        const GRAVITY: V2f = v2!(0.0, -50.0);
-
-        fn friction(vel: f32) -> f32 {
-            vel * -8.0
-        }
-
-        fn delta_position<T>(acc: T, vel: T, dt: f32) -> T
-            where T: Mul<f32, Output=T> + Add<Output=T>,
-                  f32: Mul<T, Output=T>,
-        {
-            0.5 * acc * dt*dt + vel * dt
-        }
-
-        fn delta_velocity<T>(acc: T, dt: f32) -> T
-            where T: Mul<f32, Output=T>
-        {
-            acc * dt
-        }
-
-        let (V2 { x: mut dx, y: mut dy }, mut new_vel) = match command {
-            // TODO: do different things based on MovementState
-            MovementCommand::Acceleration(mut a) => {
-                a += v2!(friction(self.vel.x), 0.0);
-                (delta_position(a, self.vel, dt), self.vel + delta_velocity(a, dt))
-            },
-            // TODO: do different things based on MovementState
-            MovementCommand::Velocity(new_vel) => {
-                (delta_position(v2!(0.0, 0.0), new_vel, dt), new_vel)
-            },
-            MovementCommand::Platformer { dir, jump } => {
-                let base_acc_x = HORIZONTAL_ACC * match dir {
-                    Some(Direction::Right) => 1.0,
-                    Some(Direction::Left) => -1.0,
-                    None                   => 0.0,
-                };
-                match self.movement_state {
-                    MovementState::OnTheGround => {
-                        let acc_x = base_acc_x + friction(self.vel.x);
-                        let new_velx = self.vel.x + delta_velocity(acc_x, dt);
-                        if jump {
-                            self.movement_state = MovementState::InTheAir {
-                                jumped_again: false,
-                            };
-
-                            (
-                                delta_position(v2!(acc_x, 0.0), self.vel, dt),
-                                v2!(new_velx, JUMP_VEL),
-                            )
-                        } else {
-                            (
-                                // -0.01 is for checking if there is a tile underneath
-                                v2!(delta_position(acc_x, self.vel.x, dt), -0.01),
-                                v2!(new_velx, 0.0),
-                            )
-                        }
-                    },
-                    MovementState::InTheAir { jumped_again: false } if jump => {
-                        self.movement_state = MovementState::InTheAir {
-                            jumped_again: true,
-                        };
-                        let acc_x = base_acc_x;
-                        let new_vel = v2!(
-                            self.vel.x + delta_velocity(acc_x, dt),
-                            0.75 * JUMP_VEL,
-                        );
-                        let acc = v2!(acc_x, 0.0);
-
-                        (delta_position(acc, self.vel, dt), new_vel)
-                    },
-                    MovementState::InTheAir { .. } => {
-                        let acc = {
-                            let acc_x = {
-                                let air_movement_penalty = base_acc_x * 0.8;
-                                base_acc_x - air_movement_penalty
-                            };
-                            v2!(acc_x, GRAVITY.y)
-                        };
-
-                        (delta_position(acc, self.vel, dt), self.vel + delta_velocity(acc, dt))
-                    },
-                }
-            },
-        };
-
-        if dx != 0.0 {
-            if let Some(tile_x) = h_tilemap_collision(self, tilemap, dx).map(|x| x as f32) {
-                new_vel.x = 0.0;
-                dx = if dx > 0.0 {
-                    tile_x - self.pos.x - (self.size.x + self.bottom_left_offset.x) * 1.01
-                } else {
-                    tile_x + 1.0 - self.pos.x - self.bottom_left_offset.x * 1.01
-                }
-            }
-        }
-        self.pos.x += dx;
-
-        if dy != 0.0 {
-            if let Some(tile_y) = v_tilemap_collision(self, tilemap, dy).map(|y| y as f32) {
-                new_vel.y = 0.0;
-                dy = if dy > 0.0 {
-                    tile_y - self.pos.y - (self.size.y + self.bottom_left_offset.y) * 1.01
-                } else {
-                    self.movement_state = MovementState::OnTheGround;
-                    tile_y + 1.0 - self.pos.y - self.bottom_left_offset.y * 1.01
-                }
-            } else if let MovementState::OnTheGround = self.movement_state {
-                self.movement_state = MovementState::InTheAir { jumped_again: false };
-            }
-        }
-        self.pos.y += dy;
-
-        self.vel = new_vel;
-        clamp(&mut self.vel.x, -Entity::MAX_VELOCITY.x, Entity::MAX_VELOCITY.x);
-        clamp(&mut self.vel.y, -Entity::MAX_VELOCITY.y, Entity::MAX_VELOCITY.y);
     }
 }
 
 impl std::fmt::Display for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use MovementState::*;
         let airborne = match self.movement_state {
-            MovementState::OnTheGround                      => "_",
-            MovementState::InTheAir { jumped_again: false } => "-",
-            MovementState::InTheAir { jumped_again: true }  => "^",
+            OnTheGround                      => "_",
+            InTheAir { jumped_again: false } => "-",
+            InTheAir { jumped_again: true }  => "^",
         };
         write!(
             f,
@@ -843,6 +743,7 @@ struct Rect2 {
     pub max: V2f,
 }
 
+#[allow(dead_code)]
 impl Rect2 {
     pub fn right(self)  -> f32 { self.max.x }
     pub fn left(self)   -> f32 { self.min.x }
@@ -906,6 +807,7 @@ fn h_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dx: f32) -> Option<i3
     None
 }
 
+#[allow(dead_code)]
 fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i32> {
     assert_ne!(dy, 0.0, "Collision dy");
 

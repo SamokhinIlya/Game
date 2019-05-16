@@ -251,7 +251,7 @@ impl Tilemap {
             if min.y < 0 || min.y >= dst.height() {
                 continue;
             }
-            clamp(&mut min.x, 0, dst.width());
+            min.x = clamp(min.x, 0, dst.width());
 
             let mut max = tilemap_pos_to_screen_pos(
                 v2!(self.width, tile_y).into(),
@@ -259,7 +259,7 @@ impl Tilemap {
                 dst.dim(),
                 info.size,
             );
-            clamp(&mut max.x, 0, dst.width());
+            max.x = clamp(max.x, 0, dst.width());
 
             render::draw_line(dst, min, max, color, thickness);
         }
@@ -277,7 +277,7 @@ impl Tilemap {
             if min.x < 0 || min.x >= dst.width() {
                 continue;
             }
-            clamp(&mut min.y, 0, dst.height());
+            min.y = clamp(min.y, 0, dst.height());
 
             let mut max = tilemap_pos_to_screen_pos(
                 v2!(tile_x, 0).into(),
@@ -285,7 +285,7 @@ impl Tilemap {
                 dst.dim(),
                 info.size,
             );
-            clamp(&mut max.y, 0, dst.height());
+            max.y = clamp(max.y, 0, dst.height());
 
             render::draw_line(dst, min, max, color, thickness);
         }

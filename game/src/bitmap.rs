@@ -73,10 +73,10 @@ impl Bitmap {
 
     pub fn clamped_view(&self, mut top_left: V2i, mut bottom_right: V2i) -> BitmapView {
         //TODO: rectangle type and contains method
-        utils::clamp(&mut top_left.x, 0, self.width);
-        utils::clamp(&mut top_left.y, 0, self.height);
-        utils::clamp(&mut bottom_right.x, 0, self.width);
-        utils::clamp(&mut bottom_right.y, 0, self.height);
+        top_left.x = utils::clamp(top_left.x, 0, self.width);
+        top_left.y = utils::clamp(top_left.y, 0, self.height);
+        bottom_right.x = utils::clamp(bottom_right.x, 0, self.width);
+        bottom_right.y = utils::clamp(bottom_right.y, 0, self.height);
 
         let ptr = unsafe {
             self.data.add((top_left.y * self.width + top_left.x) as usize)
