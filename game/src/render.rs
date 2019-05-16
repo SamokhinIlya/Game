@@ -1,8 +1,9 @@
 pub mod text;
-mod color;
+pub mod color;
+pub mod bitmap;
 
 use std::mem::swap;
-use crate::bitmap::Bitmap;
+use bitmap::Bitmap;
 use crate::vector::prelude::*;
 
 pub use color::Color;

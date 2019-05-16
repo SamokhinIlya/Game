@@ -1,8 +1,10 @@
 use std::ops::{Index, IndexMut};
 use crate::{
-    render,
+    render::{
+        self,
+        bitmap::Bitmap,
+    },
     vector::prelude::*,
-    bitmap::Bitmap,
     file::prelude::*,
 };
 
