@@ -49,18 +49,12 @@ macro_rules! v2 {
 // "trait bounds other than `Sized` on const fn parameters are unstable"
 // is no more
 impl<T: Num32> V2<T> {
-    pub fn new(x: T, y: T) -> Self {
-        V2 { x, y }
-    }
-
     pub fn diag(val: T) -> Self {
-        Self::new(val, val)
+        Self { x: val, y: val }
     }
 
-    pub fn map<F>(self, f: F) -> Self
-        where F: Fn(T) -> T
-    {
-        Self::new(f(self.x), f(self.y))
+    pub fn map(self, f: impl Fn(T) -> T) -> Self {
+        Self { x: f(self.x), y: f(self.y) }
     }
 }
 
@@ -75,20 +69,20 @@ impl V2<f32> {
 }
 
 impl From<V2i> for V2f {
-    fn from(v: V2i) -> V2f {
-        v2!(v.x as f32, v.y as f32)
+    fn from(v: V2i) -> Self {
+        Self { x: v.x as f32, y: v.y as f32 }
     }
 }
 
 impl From<V2f> for V2i {
-    fn from(v: V2f) -> V2i {
-        v2!(v.x as i32, v.y as i32)
+    fn from(v: V2f) -> Self {
+        Self { x: v.x as i32, y: v.y as i32 }
     }
 }
 
 impl<T: Num32> From<(T, T)> for V2<T> {
     fn from((x, y): (T, T)) -> Self {
-        v2!(x, y)
+        Self { x, y }
     }
 }
 
@@ -101,7 +95,7 @@ impl<T: Num32> Into<(T, T)> for V2<T> {
 impl<T: Num32> Add for V2<T> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        v2!(self.x + rhs.x, self.y + rhs.y)
+        Self { x: self.x + rhs.x, y: self.y + rhs.y }
     }
 }
 
@@ -114,7 +108,7 @@ impl<T: Num32> AddAssign for V2<T> {
 impl<T: Num32> Sub for V2<T> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        V2::new(self.x - rhs.x, self.y - rhs.y)
+        Self { x: self.x - rhs.x, y: self.y - rhs.y }
     }
 }
 
@@ -127,28 +121,28 @@ impl<T: Num32> SubAssign for V2<T> {
 impl<T: Num32> Mul<T> for V2<T> {
     type Output = Self;
     fn mul(self, rhs: T) -> Self::Output {
-        V2::new(self.x * rhs, self.y * rhs)
+        Self { x: self.x * rhs, y: self.y * rhs }
     }
 }
 
 impl Mul<V2<i32>> for i32 {
     type Output = V2<i32>;
     fn mul(self, rhs: Self::Output) -> Self::Output {
-        V2::new(self * rhs.x, self * rhs.y)
+        Self::Output { x: self * rhs.x, y: self * rhs.y }
     }
 }
 
 impl Mul<V2<f32>> for f32 {
     type Output = V2<f32>;
     fn mul(self, rhs: Self::Output) -> Self::Output {
-        V2::new(self * rhs.x, self * rhs.y)
+        Self::Output { x: self * rhs.x, y: self * rhs.y }
     }
 }
 
 impl<T: Num32> Neg for V2<T> {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        V2::new(-self.x, -self.y)
+        Self { x: -self.x, y: -self.y }
     }
 }
 

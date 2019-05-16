@@ -155,7 +155,7 @@ impl Tilemap {
         let new_width = new_width as usize;
         if new_width > old_width {
             let dwidth = new_width - old_width;
-            self.map.resize(new_width * self.height as usize, Default::default());
+            self.map.resize(new_width * self.height as usize, Tile::default());
 
             let mut cursor = old_width;
             while cursor < self.map.len() {
@@ -170,21 +170,16 @@ impl Tilemap {
                 self.map[cursor..].rotate_left(dwidth);
                 cursor += new_width;
             }
-            self.map.resize(new_width * self.height as usize, Default::default());
+            self.map.resize(new_width * self.height as usize, Tile::default());
         }
 
         if new_height != self.height {
-            self.map.resize((self.width * new_height) as usize, Default::default());
+            self.map.resize((self.width * new_height) as usize, Tile::default());
             self.height = new_height;
         }
     }
 
-    pub fn draw(
-        &self,
-        dst: &Bitmap,
-        camera: V2f,
-        info: &TileInfo,
-    ) {
+    pub fn draw(&self, dst: &Bitmap, camera: V2f, info: &TileInfo) {
         use std::cmp::{min, max};
 
         let camera_i: V2i = camera.floor().into();
@@ -303,9 +298,7 @@ struct TilemapSize {
 }
 
 impl Load for Tilemap {
-    fn load<P>(filepath: P) -> io::Result<Self>
-        where P: AsRef<Path>
-    {
+    fn load(filepath: impl AsRef<Path>) -> io::Result<Self> {
         use std::mem::{size_of, uninitialized as uninit};
 
         let file = crate::file::read_entire_file(filepath)?;
@@ -336,9 +329,7 @@ impl Load for Tilemap {
 }
 
 impl Save for Tilemap {
-    fn save<P>(&self, filepath: P) -> io::Result<()>
-        where P: AsRef<Path>
-    {
+    fn save(&self, filepath: impl AsRef<Path>) -> io::Result<()> {
         use std::mem::{size_of, uninitialized as uninit};
 
         let to_file = {

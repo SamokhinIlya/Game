@@ -5,9 +5,11 @@ use std::{
     iter::Iterator,
     slice,
 };
-use crate::file::{Load, read_entire_file};
-use crate::vector::prelude::*;
-use crate::render::Color;
+use crate::{
+    file::{prelude::*, read_entire_file},
+    vector::prelude::*,
+    render::Color,
+};
 
 #[derive(Debug)]
 pub struct Bitmap {
@@ -20,7 +22,7 @@ impl Drop for Bitmap {
     fn drop(&mut self) {
         let capacity = (self.width * self.height) as usize;
         unsafe {
-            let _ = Vec::from_raw_parts(self.data, capacity, capacity);
+            mem::drop(Vec::from_raw_parts(self.data, capacity, capacity))
         }
     }
 }
@@ -123,13 +125,9 @@ impl<'a> Iterator for BitmapView<'a> {
     }
 }
 
-use std::path::Path;
-
 impl Load for Bitmap {
-    #[allow(non_snake_case, clippy::cast_ptr_alignment)]
-    fn load<P: AsRef<Path>>(filepath: P) -> std::io::Result<Self> {
-        let file = read_entire_file(filepath)?;
-
+    #[allow(non_snake_case)]
+    fn load(filepath: impl AsRef<Path>) -> io::Result<Self> {
         #[repr(C, packed)]
         #[derive(Copy, Clone, Debug)]
         struct BITMAPFILEHEADER {
@@ -178,11 +176,11 @@ impl Load for Bitmap {
             BITMAPV5HEADER: BITMAPV5HEADER,
         };
 
+        let file = read_entire_file(filepath)?;
         let header = unsafe {
             ptr::read_unaligned(file.as_ptr() as *const BitmapHeader)
         };
-        const BM: u16 = ('B' as u16) | ('M' as u16) << 8;
-        assert!(header.BITMAPFILEHEADER.bfType == BM);
+        assert!(header.BITMAPFILEHEADER.bfType == unsafe { mem::transmute(*b"BM") });
 
         let bmp_data = {
             let mut vec = Vec::<u32>::with_capacity(header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>());
@@ -194,18 +192,20 @@ impl Load for Bitmap {
         let bmp_height = header.BITMAPV5HEADER.bV5Height;
 
         let mut dst_row: *mut u32 = bmp_data;
+
+        #[allow(clippy::cast_ptr_alignment)]
         let mut src_row: *mut u32 = unsafe {
-            file.as_ptr().add(
-                header.BITMAPFILEHEADER.bfOffBits as usize
-                    + ((bmp_height - 1) * bmp_width) as usize * size_of::<u32>()
-            ) as *mut u32
+            let end_row_offset = header.BITMAPFILEHEADER.bfOffBits as usize
+                + ((bmp_height - 1) * bmp_width) as usize * size_of::<u32>();
+            file.as_ptr().add(end_row_offset) as *mut u32
         };
+
         unsafe {
             for _y in 0..bmp_height {
                 let mut dst = dst_row;
                 let mut src = src_row; 
                 for _x in 0..bmp_width {
-                    *dst = *src;
+                    ptr::write_unaligned(dst, *src);
                     dst = dst.add(1);
                     src = src.add(1);
                 }
@@ -214,7 +214,7 @@ impl Load for Bitmap {
             }
         }
 
-        Ok(Bitmap {
+        Ok(Self {
             data: bmp_data,
             width: bmp_width,
             height: bmp_height,
@@ -223,8 +223,8 @@ impl Load for Bitmap {
 }
 
 impl From<platform::graphics::WindowBuffer> for Bitmap {
-    #[allow(clippy::cast_ptr_alignment)]
     fn from(window_buffer: platform::graphics::WindowBuffer) -> Self {
+        #[allow(clippy::cast_ptr_alignment)]
         Self {
             data: window_buffer.data as *mut u32,
             width: window_buffer.width,

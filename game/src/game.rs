@@ -117,10 +117,12 @@ pub fn update_and_render(
     game_data:     *mut (),
 ) -> String {
     let mut window_bmp = Bitmap::from(window_buffer);
+
     #[allow(clippy::cast_ptr_alignment)]
-        let data = unsafe {
+    let data = unsafe {
         &mut *(game_data as *mut GameData)
     };
+
     let dt = input.dt;
 
     if data.tile_info.screen_width_in_px != window_bmp.width() {
@@ -160,7 +162,7 @@ fn playing(
 
     // attack update ///////////////////////////////////////////////////////////////
     if data.player_attack.health.hp > 0 {
-        for enemy in data.enemies.iter_mut() {
+        for enemy in &mut data.enemies {
             if enemy.health.hp <= 0 {
                 continue
             }
@@ -308,11 +310,11 @@ fn playing(
 
     data.tilemap.draw(screen, data.camera_pos, &data.tile_info);
 
-    let bmp = match data.player.facing_direction {
+    let player_bmp = match data.player.facing_direction {
         Direction::Right => &data.player_bmps.right,
         Direction::Left => &data.player_bmps.left,
     };
-    data.player.draw(screen, bmp, data.camera_pos, data.tile_info.size);
+    data.player.draw(screen, player_bmp, data.camera_pos, data.tile_info.size);
 
     let rect = data.player.rect();
     let min = tilemap_pos_to_screen_pos(rect.min, data.camera_pos, screen.dim(), data.tile_info.size);
@@ -582,12 +584,15 @@ impl Entity {
     }
 
     pub fn mov(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
+        // TODO: temporary
+        #[allow(clippy::single_match)]
         match command {
             MovementCommand::Platformer { dir, jump } => {
                 fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
-                    match (tile0, tile1) {
-                        (Some(Tile::Empty), Some(Tile::Empty)) => false,
-                        _ => true,
+                    if let (Some(Tile::Empty), Some(Tile::Empty)) = (tile0, tile1) {
+                        false
+                    } else {
+                        true
                     }
                 }
 
@@ -648,9 +653,9 @@ impl Entity {
 
                 // ground check //////////
                 if let OnTheGround = self.movement_state {
-                    match tilemap.get(self.pos.x.floor() as i32, self.pos.y.floor() as i32 - 1) {
-                        Some(Tile::Empty) => self.movement_state = InTheAir { jumped_again: false },
-                        _ => (),
+                    let tile_under = tilemap.get(self.pos.x.floor() as i32, self.pos.y.floor() as i32 - 1);
+                    if let Some(Tile::Empty) = tile_under {
+                        self.movement_state = InTheAir { jumped_again: false };
                     }
                 }
                 // ground check //////////
@@ -769,6 +774,7 @@ fn aabb_collision(rect0: Rect2, rect1: Rect2) -> bool {
 }
 
 fn h_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dx: f32) -> Option<i32> {
+    #![allow(clippy::float_cmp)]
     assert_ne!(dx, 0.0, "Collision dx");
 
     let u_tile_y = (entity.pos.y + entity.size.y + entity.bottom_left_offset.y).floor() as i32;
@@ -784,16 +790,11 @@ fn h_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dx: f32) -> Option<i3
 
     let mut tile_x = from_x;
     loop {
-        match (
+        if is_obstacle(
             tilemap.get(tile_x, u_tile_y),
             tilemap.get(tile_x, d_tile_y),
         ) {
-            (Some(up), Some(dn)) if up.is_obstacle() || dn.is_obstacle() =>
-                return Some(tile_x),
-            (None, _   ) |
-            (_   , None) =>
-                return Some(tile_x),
-            _ => (),
+            return Some(tile_x);
         }
 
         if tile_x == to_x {
@@ -807,6 +808,9 @@ fn h_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dx: f32) -> Option<i3
 
 #[allow(dead_code)]
 fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i32> {
+    // should be allowed for comparisons with 0.0,
+    // but doesn't work with assert or macros in general
+    #![allow(clippy::float_cmp)]
     assert_ne!(dy, 0.0, "Collision dy");
 
     let r_tile_x = (entity.pos.x + entity.size.x + entity.bottom_left_offset.x).floor() as i32;
@@ -822,16 +826,11 @@ fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i3
 
     let mut tile_y = from_y;
     loop {
-        match (
+        if is_obstacle(
             tilemap.get(r_tile_x, tile_y),
             tilemap.get(l_tile_x, tile_y),
         ) {
-            (Some(rt), Some(lt)) if rt.is_obstacle() || lt.is_obstacle() =>
-                return Some(tile_y),
-            (None, _   ) |
-            (_   , None) =>
-                return Some(tile_y),
-            _ => (),
+            return Some(tile_y);
         }
 
         if tile_y == to_y {
@@ -841,4 +840,12 @@ fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i3
     }
 
     None
+}
+
+fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
+    match (tile0, tile1) {
+        (Some(rt), Some(lt)) if rt.is_obstacle() || lt.is_obstacle() => true,
+        (None, _) | (_, None) => true,
+        _ => false,
+    }
 }
