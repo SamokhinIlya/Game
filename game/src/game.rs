@@ -5,9 +5,9 @@ use utils::*;
 use crate::{
     render::{
         self,
-        color::Color,
+        Color,
+        Bitmap,
         text::FontBitmaps,
-        bitmap::Bitmap,
     },
     vector::{
         prelude::*,
@@ -72,13 +72,7 @@ struct PlayerBmps {
 pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
-        tilemap: Tilemap::load("data/levels/map_00")
-            .unwrap_or_else(|_| Tilemap::new(
-                15,
-                15,
-                //SCREEN_WIDTH_IN_TILES.ceil() as i32,
-                //SCREEN_HEIGHT_IN_TILES.ceil() as i32,
-            )),
+        tilemap: Tilemap::load("data/levels/map_00").unwrap_or(Tilemap::new(15, 15)),
         tile_info: TileInfo {
             size: 64,
             screen_width: 0.0,

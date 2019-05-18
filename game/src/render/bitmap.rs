@@ -126,55 +126,8 @@ impl<'a> Iterator for BitmapView<'a> {
 }
 
 impl Load for Bitmap {
-    #[allow(non_snake_case)]
     fn load(filepath: impl AsRef<Path>) -> io::Result<Self> {
-        #[repr(C, packed)]
-        #[derive(Copy, Clone, Debug)]
-        struct BITMAPFILEHEADER {
-            bfType: u16,
-            bfSize: u32,
-            bfReserved1: u16,
-            bfReserved2: u16,
-            bfOffBits: u32,
-        }
-
-        #[repr(C, packed)]
-        #[derive(Copy, Clone, Debug)]
-        struct BITMAPV5HEADER {
-            bV5Size: u32,
-            bV5Width: i32,
-            bV5Height: i32,
-            bV5Planes: u16,
-            bV5BitCount: u16,
-            bV5Compression: u32,
-            bV5SizeImage: u32,
-            bV5XPelsPerMeter: i32,
-            bV5YPelsPerMeter: i32,
-            bV5ClrUsed: u32,
-            bV5ClrImportant: u32,
-            bV5RedMask: u32,
-            bV5GreenMask: u32,
-            bV5BlueMask: u32,
-            bV5AlphaMask: u32,
-            /*
-            bV5CSType: u32       ,
-            bV5Endpoints: CIEXYZTRIPLE,
-            bV5GammaRed: u32       ,
-            bV5GammaGreen: u32       ,
-            bV5GammaBlue: u32       ,
-            bV5Intent: u32       ,
-            bV5ProfileData: u32       ,
-            bV5ProfileSize: u32       ,
-            bV5Reserved: u32       ,
-            */
-        }
-
-        #[repr(C, packed)]
-        #[derive(Copy, Clone, Debug)]
-        struct BitmapHeader {
-            BITMAPFILEHEADER: BITMAPFILEHEADER,
-            BITMAPV5HEADER: BITMAPV5HEADER,
-        };
+        use bitmap_headers::*;
 
         let file = read_entire_file(filepath)?;
         let header = unsafe {
@@ -183,7 +136,9 @@ impl Load for Bitmap {
         assert!(header.BITMAPFILEHEADER.bfType == unsafe { mem::transmute(*b"BM") });
 
         let bmp_data = {
-            let mut vec = Vec::<u32>::with_capacity(header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>());
+            let mut vec = Vec::<u32>::with_capacity(
+                header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>()
+            );
             let ptr = vec.as_mut_ptr();
             mem::forget(vec);
             ptr
@@ -230,5 +185,56 @@ impl From<platform::graphics::WindowBuffer> for Bitmap {
             width: window_buffer.width,
             height: window_buffer.height,
         }
+    }
+}
+
+#[allow(non_snake_case)]
+mod bitmap_headers {
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Debug)]
+    pub struct BitmapHeader {
+        pub BITMAPFILEHEADER: BITMAPFILEHEADER,
+        pub BITMAPV5HEADER: BITMAPV5HEADER,
+    }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Debug)]
+    pub struct BITMAPFILEHEADER {
+        pub bfType: u16,
+        pub bfSize: u32,
+        pub bfReserved1: u16,
+        pub bfReserved2: u16,
+        pub bfOffBits: u32,
+    }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Debug)]
+    pub struct BITMAPV5HEADER {
+        pub bV5Size: u32,
+        pub bV5Width: i32,
+        pub bV5Height: i32,
+        pub bV5Planes: u16,
+        pub bV5BitCount: u16,
+        pub bV5Compression: u32,
+        pub bV5SizeImage: u32,
+        pub bV5XPelsPerMeter: i32,
+        pub bV5YPelsPerMeter: i32,
+        pub bV5ClrUsed: u32,
+        pub bV5ClrImportant: u32,
+        pub bV5RedMask: u32,
+        pub bV5GreenMask: u32,
+        pub bV5BlueMask: u32,
+        pub bV5AlphaMask: u32,
+        /*
+        pub bV5CSType: u32       ,
+        pub bV5Endpoints: CIEXYZTRIPLE,
+        pub bV5GammaRed: u32       ,
+        pub bV5GammaGreen: u32       ,
+        pub bV5GammaBlue: u32       ,
+        pub bV5Intent: u32       ,
+        pub bV5ProfileData: u32       ,
+        pub bV5ProfileSize: u32       ,
+        pub bV5Reserved: u32       ,
+        */
     }
 }

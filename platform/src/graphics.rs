@@ -1,5 +1,3 @@
-use winapi::ctypes::c_void;
-
 #[derive(Copy, Clone)]
 pub struct WindowBuffer {
     pub data: *mut u32,

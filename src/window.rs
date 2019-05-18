@@ -234,18 +234,17 @@ impl Window {
     }
 }
 
+// TODO: other messages:
+//  WM_COMPACTING - system needs more memory, so we should free
+//  WM_INPUTLANGCHANGE
 unsafe extern "system" fn window_class_proc(
     window_handle: HWND,
     message: UINT,
     w_param: WPARAM,
     l_param: LPARAM,
 ) -> LRESULT {
-    /*TODO: other messages:
-        WM_COMPACTING - system needs more memory, so we should free
-        WM_INPUTLANGCHANGE 
-    */
-
     let mut result = 0;
+
     match message {
         WM_CLOSE       => PostQuitMessage(0),
         WM_ACTIVATEAPP => (), //TODO: pause the game and something else maybe

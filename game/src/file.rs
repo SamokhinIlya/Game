@@ -10,15 +10,11 @@ pub mod prelude {
     pub use std::{path::Path, io};
 }
 
-pub trait Load
-    where Self: Sized
-{
+pub trait Load: Sized {
     fn load(filepath: impl AsRef<Path>) -> io::Result<Self>;
 }
 
-pub trait Save
-    where Self: Sized
-{
+pub trait Save: Sized {
     fn save(&self, filepath: impl AsRef<Path>) -> io::Result<()>;
 }
 
