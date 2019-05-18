@@ -46,9 +46,7 @@ struct GameData {
 
     pub player: Entity,
 
-    pub player_attack: Entity,
     pub player_attack_counter: f32,
-    pub player_attack_prev_pos: V2f,
 
     pub enemies: [Entity; 1],
 
@@ -58,8 +56,8 @@ struct GameData {
 
     pub font_bmp: render::text::FontBitmaps,
 
-    pub c: f32,
-    pub col: Color,
+    pub collision_box_color_counter: f32,
+    pub collision_box_color: Color,
 }
 
 struct PlayerBmps {
@@ -84,9 +82,7 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
         camera_pos: v2!(0.0, 0.0),
         player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
 
-        player_attack: Entity::with_pos_health(v2!(0.0, 0.0), 0),
         player_attack_counter: 0.0,
-        player_attack_prev_pos: v2!(0.0, 0.0),
 
         enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 5); 1],
         player_bmps: PlayerBmps {
@@ -98,8 +94,8 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
         enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.bmp").unwrap(),
         enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.bmp").unwrap(),
         font_bmp: render::text::FontBitmaps::new("data/fonts/Inconsolata-Regular.ttf", 20).unwrap(),
-        c: 0.0,
-        col: Color::WHITE,
+        collision_box_color_counter: 0.0,
+        collision_box_color: Color::WHITE,
     });
 
     Box::into_raw(result) as *mut ()
@@ -155,16 +151,25 @@ fn playing(
     }
 
     // attack update ///////////////////////////////////////////////////////////////
-    if data.player_attack.health.hp > 0 {
-        for enemy in &mut data.enemies {
-            if enemy.health.hp <= 0 {
-                continue
-            }
-            if !aabb_collision(data.player_attack.rect(), enemy.rect()) {
-                continue
-            }
+    // FIXME: -0.3 is cooldown time
+    if data.player_attack_counter >= -0.3 {
+        data.player_attack_counter -= dt;
+    // FIXME: with this setup attack will damage enemy only on the next frame
+    } else if input.keyboard[J].pressed() && data.player_attack_counter < -0.3 {
+        data.player_attack_counter = 0.3;
+    }
 
+    if data.player_attack_counter > 0.0 {
+        let mut attack_rect = data.player.rect();
+        attack_rect.translate(match data.player.facing {
+            Direction::Left => v2!(-1.0, 0.0),
+            Direction::Right => v2!(1.0, 0.0),
+        });
+        let alive_colliding_enemies = data.enemies.iter_mut()
+            .filter(|foe| foe.health.hp > 0 && aabb_collision(attack_rect, foe.rect()));
+        for enemy in alive_colliding_enemies {
             match enemy.health.knockback {
+                Knockback::Knocked { .. } => (),
                 Knockback::No => {
                     enemy.health.hp -= 1;
                     enemy.health.knockback = Knockback::Knocked {
@@ -172,79 +177,43 @@ fn playing(
                         just_hit: true,
                     };
                 },
-                Knockback::Knocked {..} => (),
             }
         }
-
-        data.player_attack_counter -= dt;
-        if data.player_attack_counter < 0.0 {
-            data.player_attack.health.hp = 0;
-        }
-    } else if input.keyboard[J].pressed() {
-        data.player_attack_counter = 0.5;
-        data.player_attack.health.hp = 1;
-        data.player_attack.facing_direction = data.player.facing_direction;
-        data.player_attack.pos = v2!(
-            data.player.pos.x + match data.player.facing_direction {
-                Direction::Right => 0.5,
-                Direction::Left => -0.5,
-            },
-            data.player.pos.y,
-        );
-        data.player_attack_prev_pos = data.player_attack.pos;
     }
 
     // player movement //////////////////////////////////////////////////////////
     let player_command = {
-        let (left, right) = (
-            input.keyboard[A].is_down(),
-            input.keyboard[D].is_down(),
-        );
-        let dir = match (left, right) {
-            (false, true) => Some(Direction::Right),
-            (true, false) => Some(Direction::Left),
-            _             => None,
-        };
-        let jump = input.keyboard[K].pressed();
-        MovementCommand::Platformer { dir, jump }
+        MovementCommand::Platformer {
+            dir: match (input.keyboard[A].is_down(), input.keyboard[D].is_down()) {
+                (false, true) => Some(Direction::Right),
+                (true, false) => Some(Direction::Left),
+                _             => None,
+            },
+            jump: input.keyboard[K].pressed(),
+        }
     };
     if let MovementCommand::Platformer { dir: Some(dir), .. } = player_command {
-        data.player.facing_direction = dir;
+        data.player.facing  = dir;
     }
     data.player.mov(&data.tilemap, player_command, dt);
-
-    /////////////////////////////////////////////////////////////////////////////
-    /* attack movement */ {
-        let dx = match data.player_attack.facing_direction {
-            Direction::Right => 0.5,
-            Direction::Left => -0.5,
-        };
-        //TODO: kill projectile when out of sight
-        if h_tilemap_collision(&data.player_attack, &data.tilemap, dx).is_some() {
-            data.player_attack.health.hp = 0;
-        } else {
-            data.player_attack.pos.x += dx;
-        }
-    }
 
     // enemy movement //////////////////////////////////////////////////////
     for enemy in data.enemies.iter_mut().filter(|x| x.health.hp > 0) {
         let enemy_command = match enemy.health.knockback {
-            Knockback::No  => {
-                if distance_sq(enemy.pos, data.player.pos) >= 16.0 {
-                    let dir = if enemy.pos.x < data.player.pos.x {
+            Knockback::No if distance_sq(enemy.pos, data.player.pos) >= 16.0 => {
+                MovementCommand::Platformer {
+                    dir: if enemy.pos.x < data.player.pos.x {
                         Some(Direction::Right)
                     } else if enemy.pos.x > data.player.pos.x {
                         Some(Direction::Left)
                     } else {
                         None
-                    };
-                    let jump = enemy.pos.y < data.player.pos.y;
-
-                    MovementCommand::Platformer { dir, jump }
-                } else {
-                    MovementCommand::Platformer { dir: None, jump: false, }
+                    },
+                    jump: enemy.pos.y < data.player.pos.y,
                 }
+            }
+            Knockback::No => {
+                MovementCommand::Platformer { dir: None, jump: false }
             },
             Knockback::Knocked { time_remaining, just_hit: true } => {
                 enemy.health.knockback = Knockback::Knocked {
@@ -254,7 +223,7 @@ fn playing(
 
                 let force = 100.0;
                 MovementCommand::Velocity(v2!(
-                    match enemy.facing_direction {
+                    match enemy.facing {
                         Direction::Left => force,
                         Direction::Right => -force,
                     },
@@ -276,7 +245,7 @@ fn playing(
             },
         };
         if let MovementCommand::Platformer { dir: Some(dir), .. } = enemy_command {
-            enemy.facing_direction = dir;
+            enemy.facing  = dir;
         }
         enemy.mov(&data.tilemap, enemy_command, input.dt);
     }
@@ -304,51 +273,79 @@ fn playing(
 
     data.tilemap.draw(screen, data.camera_pos, &data.tile_info);
 
-    let player_bmp = match data.player.facing_direction {
+    let player_bmp = match data.player.facing  {
         Direction::Right => &data.player_bmps.right,
         Direction::Left => &data.player_bmps.left,
     };
     data.player.draw(screen, player_bmp, data.camera_pos, data.tile_info.size);
 
-    let rect = data.player.rect();
-    let min = tilemap_pos_to_screen_pos(rect.min, data.camera_pos, screen.dim(), data.tile_info.size);
-    let max = tilemap_pos_to_screen_pos(rect.max, data.camera_pos, screen.dim(), data.tile_info.size);
-    data.c += dt;
-    if data.c > 0.2 {
-        data.c = 0.0;
-        data.col = match data.col {
+    // collision box flashing
+    data.collision_box_color_counter += dt;
+    if data.collision_box_color_counter > 0.2 {
+        data.collision_box_color_counter = 0.0;
+        data.collision_box_color = match data.collision_box_color {
             Color::WHITE => Color::BLACK,
             Color::BLACK => Color::WHITE,
             _ => unreachable!(),
         };
     }
-    render::draw_rect(screen, v2!(min.x, max.y), v2!(max.x, min.y), data.col, 1);
 
-    if data.player_attack.health.hp > 0 {
-        let bmp = match data.player_attack.facing_direction {
+    // player collision box
+    {
+        let rect = data.player.rect();
+        let min = tilemap_pos_to_screen_pos(rect.min, data.camera_pos, screen.dim(), data.tile_info.size);
+        let max = tilemap_pos_to_screen_pos(rect.max, data.camera_pos, screen.dim(), data.tile_info.size);
+        render::draw_rect(screen, v2!(min.x, max.y), v2!(max.x, min.y), data.collision_box_color, 1);
+    }
+
+    // attack collision box
+    if data.player_attack_counter > 0.0 {
+        let mut attack_rect = data.player.rect();
+        attack_rect.translate(match data.player.facing {
+            Direction::Left => v2!(-1.0, 0.0),
+            Direction::Right => v2!(1.0, 0.0),
+        });
+        let min = tilemap_pos_to_screen_pos(attack_rect.min, data.camera_pos, screen.dim(), data.tile_info.size);
+        let max = tilemap_pos_to_screen_pos(attack_rect.max, data.camera_pos, screen.dim(), data.tile_info.size);
+        render::draw_rect(screen, v2!(min.x, max.y), v2!(max.x, min.y), data.collision_box_color, 1);
+    }
+
+    if data.player_attack_counter > 0.0 {
+        let bmp = match data.player.facing {
             Direction::Right => &data.player_bmps.attack_right,
             Direction::Left => &data.player_bmps.attack_left,
         };
-        data.player_attack.draw(screen, bmp, data.camera_pos, data.tile_info.size);
+        let mut attack_pos = data.player.rect().top_left() + match data.player.facing {
+            Direction::Left => v2!(-1.0, 0.0),
+            Direction::Right => v2!(1.0, 0.0),
+        };
+
+        render::draw_bmp(screen, bmp, tilemap_pos_to_screen_pos(
+            attack_pos,
+            data.camera_pos,
+            screen.dim(),
+            data.tile_info.size,
+        ));
     }
 
     for enemy in &data.enemies {
-        let bmp = match enemy.facing_direction {
+        let bmp = match enemy.facing {
             Direction::Right => &data.enemy_bmp_right,
             Direction::Left => &data.enemy_bmp_left,
         };
         match enemy.health.knockback {
-            Knockback::Knocked { time_remaining, .. }
-            if (time_remaining * 20.0).sin() > 0.0 => (),
+            Knockback::Knocked { time_remaining, .. } if (time_remaining * 20.0).sin() > 0.0 => (),
             _ => enemy.draw(screen, bmp, data.camera_pos, data.tile_info.size),
         }
+
+        // enemy collision box
         let rect = enemy.rect();
         let min = tilemap_pos_to_screen_pos(rect.min, data.camera_pos, screen.dim(), data.tile_info.size);
         let max = tilemap_pos_to_screen_pos(rect.max, data.camera_pos, screen.dim(), data.tile_info.size);
         render::draw_rect(screen, v2!(min.x, max.y), v2!(max.x, min.y), Color::WHITE, 1);
     }
 
-    format!(" {}", data.player)
+    format!(" {}, attack {}", data.enemies[0].health.hp, data.player_attack_counter)
 }
 
 #[allow(clippy::useless_format)]
@@ -502,10 +499,7 @@ fn level_editor(
 }
 
 #[derive(Copy, Clone, Debug)]
-enum Direction {
-    Left,
-    Right,
-}
+enum Direction { Left, Right }
 
 #[derive(Copy, Clone, Debug)]
 enum MovementState {
@@ -536,7 +530,7 @@ struct Entity {
     pub bottom_left_offset: V2f,
     pub size: V2f,
 
-    pub facing_direction: Direction,
+    pub facing : Direction,
     pub health: Health,
     pub movement_state: MovementState,
 }
@@ -552,7 +546,7 @@ impl Entity {
             size: v2!(0.75, (0.5 - 0.001) + (0.5 - 1.0 / 9.0)),
 
             health: Health { hp: 1, knockback: Knockback::No },
-            facing_direction: Direction::Right,
+            facing : Direction::Right,
             movement_state: MovementState::InTheAir { jumped_again: true },
         }
     }
@@ -583,7 +577,8 @@ impl Entity {
         match command {
             MovementCommand::Platformer { dir, jump } => {
                 fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
-                    if let (Some(Tile::Empty), Some(Tile::Empty)) = (tile0, tile1) {
+                    use Tile::Empty;
+                    if let (Some(Empty), Some(Empty)) = (tile0, tile1) {
                         false
                     } else {
                         true
@@ -757,6 +752,11 @@ impl Rect2 {
             min: bottom_left,
             max: top_right,
         }
+    }
+
+    pub fn translate(&mut self, by: V2f) {
+        self.min += by;
+        self.max += by;
     }
 }
 
