@@ -85,7 +85,7 @@ impl FontBitmaps {
         let space = Bitmap::with_dimensions(height / 2, height).filled(Color::TRANSPARENT);
         char_bitmaps.insert(' ', space);
 
-        Ok(FontBitmaps {
+        Ok(Self {
             chars: char_bitmaps,
             height,
         })

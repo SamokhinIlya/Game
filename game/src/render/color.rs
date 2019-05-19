@@ -14,9 +14,10 @@ impl From<Color> for u32 {
 #[allow(dead_code)]
 impl Color {
     pub fn rgb(mut r: f32, mut g: f32, mut b: f32) -> Self {
-        clamp(&mut r, 0.0, 1.0);
-        clamp(&mut g, 0.0, 1.0);
-        clamp(&mut b, 0.0, 1.0);
+        r = clamp(r, 0.0, 1.0);
+        g = clamp(g, 0.0, 1.0);
+        b = clamp(b, 0.0, 1.0);
+
         let data = Self::A_MASK
             | ((r * 255.0).round() as u32) << 16
             | ((g * 255.0).round() as u32) << 8
@@ -27,7 +28,7 @@ impl Color {
 
     pub fn argb(mut a: f32, r: f32, g: f32, b: f32) -> Self {
         let mut color = Self::rgb(r, g, b);
-        clamp(&mut a, 0.0, 1.0);
+        a = clamp(a, 0.0, 1.0);
         let alpha = ((a * 255.0).round() as u32) << 24;
         color.data &= !Self::A_MASK;
         color.data |= alpha;
@@ -54,6 +55,6 @@ impl Color {
         data: Self::A_MASK | Self::R_MASK | Self::B_MASK,
     };
     pub const GREY: Self = Self {
-        data: Self::A_MASK | 0x7F7F7F,
+        data: Self::A_MASK | 0x007F_7F7F,
     };
 }

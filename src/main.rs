@@ -87,18 +87,22 @@ fn main() {
 
 fn process_messages() -> bool {
     loop {
-        let mut msg = unsafe { mem::uninitialized() };
-        let peek_msg_result = unsafe { PeekMessageA(&mut msg, ptr::null_mut(), 0, 0, PM_REMOVE) };
-        let message_available = peek_msg_result != 0;
-        if !message_available {
-            break true;
-        }
-        if msg.message == WM_QUIT {
-            break false;
-        }
-        unsafe {
-            TranslateMessage(&msg);
-            DispatchMessageA(&msg);
+        let msg = unsafe {
+            let mut msg = mem::uninitialized();
+            if PeekMessageA(&mut msg, ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                Some(msg)
+            } else {
+                None
+            }
+        };
+
+        match msg {
+            None => break true,
+            Some(msg) if msg.message == WM_QUIT => break false,
+            Some(msg) => unsafe {
+                TranslateMessage(&msg);
+                DispatchMessageA(&msg);
+            },
         }
     }
 }

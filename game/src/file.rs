@@ -1,7 +1,8 @@
 use std::{
     fs::File,
-    io::BufReader,
+    io::{self, BufReader},
     marker::Sized,
+    path::Path,
 };
 
 pub mod prelude {
@@ -9,37 +10,22 @@ pub mod prelude {
     pub use std::{path::Path, io};
 }
 
-use std::path::Path;
-use std::io;
-
-pub trait Load
-    where Self: Sized
-{
-    fn load<P>(filepath: P) -> io::Result<Self>
-        where P: AsRef<Path>;
+pub trait Load: Sized {
+    fn load(filepath: impl AsRef<Path>) -> io::Result<Self>;
 }
 
-pub trait Save
-    where Self: Sized
-{
-    fn save<P>(&self, filepath: P) -> io::Result<()>
-        where P: AsRef<Path>;
+pub trait Save: Sized {
+    fn save(&self, filepath: impl AsRef<Path>) -> io::Result<()>;
 }
 
-pub fn read_entire_file<P>(filepath: P) -> io::Result<Vec<u8>>
-    where P: AsRef<Path>
-{
-    let mut v = Vec::new();
-
+pub fn read_entire_file(filepath: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     use std::io::Read;
+    let mut v = Vec::new();
     BufReader::new(File::open(filepath)?).read_to_end(&mut v)?;
-
     Ok(v)
 }
 
-pub fn write_bytes_to_file<P>(filepath: P, bytes: &[u8]) -> io::Result<()>
-    where P: AsRef<Path>
-{
+pub fn write_bytes_to_file(filepath: impl AsRef<Path>, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write;
     File::create(filepath)?.write_all(bytes)
 }

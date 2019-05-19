@@ -108,11 +108,10 @@ impl Window {
         }
     }
 
-    #[inline(always)] pub fn width(&self) -> i32 { self.width }
-    #[inline(always)] pub fn height(&self) -> i32 { self.height }
-    #[inline(always)] pub fn handle(&self) -> HWND { self.handle }
+    pub fn width(&self) -> i32 { self.width }
+    pub fn height(&self) -> i32 { self.height }
+    pub fn handle(&self) -> HWND { self.handle }
 
-    #[inline]
     pub fn is_active(&self) -> bool {
         self.handle == unsafe { GetActiveWindow() }
     }
@@ -189,7 +188,7 @@ impl Window {
                 0,
                 bmp.width,
                 bmp.height,
-                bmp.data,
+                bmp.data as *mut c_void,
                 &self.bitmap_info,
                 DIB_RGB_COLORS,
                 SRCCOPY,
@@ -235,18 +234,17 @@ impl Window {
     }
 }
 
+// TODO: other messages:
+//  WM_COMPACTING - system needs more memory, so we should free
+//  WM_INPUTLANGCHANGE
 unsafe extern "system" fn window_class_proc(
     window_handle: HWND,
     message: UINT,
     w_param: WPARAM,
     l_param: LPARAM,
 ) -> LRESULT {
-    /*TODO: other messages:
-        WM_COMPACTING - system needs more memory, so we should free
-        WM_INPUTLANGCHANGE 
-    */
-
     let mut result = 0;
+
     match message {
         WM_CLOSE       => PostQuitMessage(0),
         WM_ACTIVATEAPP => (), //TODO: pause the game and something else maybe

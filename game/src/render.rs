@@ -1,11 +1,12 @@
 pub mod text;
-mod color;
+pub mod color;
+pub mod bitmap;
 
 use std::mem::swap;
-use crate::bitmap::Bitmap;
 use crate::vector::prelude::*;
 
 pub use color::Color;
+pub use bitmap::Bitmap;
 
 pub fn fill_rect(dst_bmp: &Bitmap, mut min: V2i, mut max: V2i, color: Color) {
     if min.x > max.x {
@@ -153,10 +154,10 @@ pub fn draw_line(
 }
 
 pub fn draw_bmp(dst: &Bitmap, src: &Bitmap, p: V2i) {
-    let src0 = v2!(
-        if p.x < 0 { -p.x } else { 0 },
-        if p.y < 0 { -p.y } else { 0 },
-    );
+    let src0 = V2 {
+        x: if p.x < 0 { -p.x } else { 0 },
+        y: if p.y < 0 { -p.y } else { 0 },
+    };
     let src1 = src.dim();
 
     let dst0 = p;
