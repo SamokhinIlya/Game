@@ -1,4 +1,11 @@
+# rust
 data/
 target/
-.idea/
 Cargo.lock
+
+# intellij
+.idea/
+*.iml
+
+# vscode
+.vscode/
