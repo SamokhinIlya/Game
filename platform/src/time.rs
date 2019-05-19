@@ -38,7 +38,6 @@ impl Counter {
 #[derive(Copy, Clone)]
 pub struct TicksElapsed(i64);
 
-#[allow(dead_code)]
 impl TicksElapsed {
     pub fn as_secs(self) -> f64 {
         self.0 as f64 / unsafe { *PERFORMANCE_FREQUENCY } as f64

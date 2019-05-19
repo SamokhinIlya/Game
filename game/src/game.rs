@@ -70,7 +70,7 @@ struct PlayerBmps {
 pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
-        tilemap: Tilemap::load("data/levels/map_00").unwrap_or(Tilemap::new(15, 15)),
+        tilemap: Tilemap::load("data/levels/map_00").unwrap_or_else(|_| Tilemap::new(15, 15)),
         tile_info: TileInfo {
             size: 64,
             screen_width: 0.0,
@@ -312,14 +312,13 @@ fn playing(
 
     if data.player_attack_counter > 0.0 {
         let bmp = match data.player.facing {
-            Direction::Right => &data.player_bmps.attack_right,
             Direction::Left => &data.player_bmps.attack_left,
+            Direction::Right => &data.player_bmps.attack_right,
         };
-        let mut attack_pos = data.player.rect().top_left() + match data.player.facing {
-            Direction::Left => v2!(-1.0, 0.0),
-            Direction::Right => v2!(1.0, 0.0),
+        let attack_pos = match data.player.facing {
+            Direction::Left => data.player.rect().top_left() - v2!(1.0, 0.0),
+            Direction::Right => data.player.rect().top_left() + v2!(1.0, 0.0),
         };
-
         render::draw_bmp(screen, bmp, tilemap_pos_to_screen_pos(
             attack_pos,
             data.camera_pos,
@@ -503,8 +502,8 @@ enum Direction { Left, Right }
 
 #[derive(Copy, Clone, Debug)]
 enum MovementState {
-    OnTheGround,
-    InTheAir { jumped_again: bool },
+    Ground,
+    Air { jumped_again: bool },
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -546,8 +545,8 @@ impl Entity {
             size: v2!(0.75, (0.5 - 0.001) + (0.5 - 1.0 / 9.0)),
 
             health: Health { hp: 1, knockback: Knockback::No },
-            facing : Direction::Right,
-            movement_state: MovementState::InTheAir { jumped_again: true },
+            facing: Direction::Right,
+            movement_state: MovementState::Air { jumped_again: true },
         }
     }
 
@@ -573,7 +572,7 @@ impl Entity {
 
     pub fn mov(&mut self, tilemap: &Tilemap, command: Option<MovementCommand>, dt: f32) {
         use MovementCommand::{Platformer, Velocity};
-        use MovementState::{OnTheGround, InTheAir};
+        use MovementState::{Ground, Air};
         use Direction::{Left, Right};
 
         const MAX_VEL_X: f32 = 10.0;
@@ -602,23 +601,23 @@ impl Entity {
                     };
                     acc_x += match self.movement_state {
                         // friction
-                        OnTheGround => -self.vel.x * 12.0,
+                        Ground => -self.vel.x * 12.0,
                         // air movement penalty
-                        InTheAir { .. } => -acc_x * 0.8,
+                        Air { .. } => -acc_x * 0.8,
                     };
 
                     self.vel.x + 0.5 * acc_x * dt
                 };
                 let new_vel_y = match self.movement_state {
-                    OnTheGround if jump => {
-                        self.movement_state = InTheAir { jumped_again: false };
+                    Ground if jump => {
+                        self.movement_state = Air { jumped_again: false };
                         JUMP_VEL
                     },
-                    InTheAir { jumped_again: false } if jump => {
-                        self.movement_state = InTheAir { jumped_again: true };
+                    Air { jumped_again: false } if jump => {
+                        self.movement_state = Air { jumped_again: true };
                         JUMP_VEL
                     },
-                    OnTheGround => 0.0,
+                    Ground => 0.0,
                     _ => self.vel.y + 0.5 * GRAVITY_ACC * dt,
                 };
 
@@ -626,7 +625,7 @@ impl Entity {
             },
             Some(Velocity(vel)) => {
                 if vel.y > 0.0 {
-                    self.movement_state = InTheAir { jumped_again: false };
+                    self.movement_state = Air { jumped_again: false };
                 }
 
                 vel.into()
@@ -636,6 +635,7 @@ impl Entity {
 
         let mut new_pos_x = self.pos.x + self.vel.x * dt;
 
+        // x collision detection
         let dx = new_pos_x - self.pos.x;
         if dx != 0.0 {
             let top_y = self.pos.y + self.bottom_left_offset.y + self.size.y;
@@ -664,12 +664,14 @@ impl Entity {
             }
         }
 
+        // x update
         self.vel.x = clamp(new_vel_x, -MAX_VEL_X, MAX_VEL_X);
         self.pos.x = new_pos_x;
 
 
         let mut new_pos_y = self.pos.y + self.vel.y * dt;
 
+        // y collision detection
         let dy = new_pos_y - self.pos.y;
         if dy != 0.0 {
             let left_x = self.pos.x + self.bottom_left_offset.x;
@@ -696,19 +698,20 @@ impl Entity {
                     new_pos_y = (bottom_y + 1) as f32 - self.bottom_left_offset.y + 0.01;
 
                     // hit the floor -> now on the ground
-                    self.movement_state = OnTheGround;
+                    self.movement_state = Ground;
                 }
             }
         }
 
+        // y update
         self.vel.y = clamp(new_vel_y, -MAX_VEL_Y, MAX_VEL_Y);
         self.pos.y = new_pos_y;
 
         // ground check //////////
-        if let OnTheGround = self.movement_state {
+        if let Ground = self.movement_state {
             let tile_under = tilemap.get(self.pos.x.floor() as i32, self.pos.y.floor() as i32 - 1);
             if let Some(Tile::Empty) = tile_under {
-                self.movement_state = InTheAir { jumped_again: false };
+                self.movement_state = Air { jumped_again: false };
             }
         }
         // ground check //////////
@@ -717,11 +720,11 @@ impl Entity {
 
 impl std::fmt::Display for Entity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use MovementState::*;
+        use MovementState::{Ground, Air};
         let airborne = match self.movement_state {
-            OnTheGround                      => "_",
-            InTheAir { jumped_again: false } => "-",
-            InTheAir { jumped_again: true }  => "^",
+            Ground                      => "_",
+            Air { jumped_again: false } => "-",
+            Air { jumped_again: true }  => "^",
         };
         write!(
             f,
@@ -737,6 +740,7 @@ enum MovementCommand {
     Platformer { dir: Option<Direction>, jump: bool },
 }
 
+/// axis aligned
 #[derive(Copy, Clone, Debug)]
 struct Rect2 {
     pub min: V2f,
@@ -773,82 +777,4 @@ fn aabb_collision(rect0: Rect2, rect1: Rect2) -> bool {
         && rect0.left() < rect1.right()
         && rect0.top() > rect1.bottom()
         && rect0.bottom() < rect1.top()
-}
-
-fn h_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dx: f32) -> Option<i32> {
-    #![allow(clippy::float_cmp)]
-    assert_ne!(dx, 0.0, "Collision dx");
-
-    let u_tile_y = (entity.pos.y + entity.size.y + entity.bottom_left_offset.y).floor() as i32;
-    let d_tile_y = (entity.pos.y + entity.bottom_left_offset.y           ).floor() as i32;
-
-    let (offset, step_x) = if dx > 0.0 {
-        (entity.size.x + entity.bottom_left_offset.x, 1)
-    } else {
-        (entity.bottom_left_offset.x, -1)
-    };
-    let from_x = (entity.pos.x + offset).floor() as i32;
-    let to_x = (entity.pos.x + offset + dx).floor() as i32;
-
-    let mut tile_x = from_x;
-    loop {
-        if is_obstacle(
-            tilemap.get(tile_x, u_tile_y),
-            tilemap.get(tile_x, d_tile_y),
-        ) {
-            return Some(tile_x);
-        }
-
-        if tile_x == to_x {
-            break
-        }
-        tile_x += step_x;
-    }
-
-    None
-}
-
-#[allow(dead_code)]
-fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i32> {
-    // should be allowed for comparisons with 0.0,
-    // but doesn't work with assert or macros in general
-    #![allow(clippy::float_cmp)]
-    assert_ne!(dy, 0.0, "Collision dy");
-
-    let r_tile_x = (entity.pos.x + entity.size.x + entity.bottom_left_offset.x).floor() as i32;
-    let l_tile_x = (entity.pos.x + entity.bottom_left_offset.x).floor() as i32;
-
-    let (offset, step_y) = if dy > 0.0 {
-        (entity.size.y + entity.bottom_left_offset.y, 1)
-    } else {
-        (entity.bottom_left_offset.y, -1)
-    };
-    let from_y = (entity.pos.y + offset).floor() as i32;
-    let to_y = (entity.pos.y + offset + dy).floor() as i32;
-
-    // FIXME: while loop
-    let mut tile_y = from_y;
-    loop {
-        if is_obstacle(
-            tilemap.get(r_tile_x, tile_y),
-            tilemap.get(l_tile_x, tile_y),
-        ) {
-            return Some(tile_y);
-        }
-
-        if tile_y == to_y {
-            break
-        }
-        tile_y += step_y;
-    }
-
-    None
-}
-
-fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
-    match (tile0, tile1) {
-        (Some(rt), Some(lt)) if rt.is_obstacle() || lt.is_obstacle() => true,
-        (None, _) | (_, None) => true,
-        _ => false,
-    }
 }

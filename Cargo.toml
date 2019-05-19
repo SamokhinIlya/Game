@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["SamokhinIlya <samokhin.ilya.97@gmail.com>"]
 edition = "2018"
 
-[dependencies]
 [dependencies.winapi]
 version = "0.3.6"
 features = [
@@ -17,7 +16,9 @@ features = [
     "profileapi",
     "handleapi",
 ]
+
 [dependencies.platform]
 path = "platform"
+
 [dependencies.game]
 path = "game"

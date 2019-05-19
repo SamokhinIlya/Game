@@ -1,9 +1,6 @@
 use std::ops::{Index, IndexMut};
 use crate::{
-    render::{
-        self,
-        bitmap::Bitmap,
-    },
+    render::{self, Bitmap},
     vector::prelude::*,
     file::prelude::*,
 };
@@ -43,10 +40,8 @@ pub struct TileInfo {
 
 impl TileInfo {
     pub fn get_bmp(&self, tile: Tile) -> &Bitmap {
-        assert!(match tile {
-            Tile::Ground => true,
-            _ => false,
-        });
+        use Tile::*;
+        assert!(if let Ground = tile { true } else { false });
         &self.bmps[0]
     }
 }
@@ -64,19 +59,11 @@ impl Default for Tile {
 }
 
 impl Tile {
-    pub fn is_obstacle(self) -> bool {
-        use self::Tile::*;
-        match self {
-            Ground => true,
-            _ => false,
-        }
-    }
-
     pub fn is_visible(self) -> bool {
         use self::Tile::*;
         match self {
             Ground => true,
-            _ => false,
+            Empty => false,
         }
     }
 }
