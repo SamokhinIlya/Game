@@ -309,7 +309,7 @@ impl Load for Tilemap {
 
         Ok(Self {
             width: width as i32,
-            height: width as i32,
+            height: height as i32,
             map,
         })
     }
