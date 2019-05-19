@@ -183,23 +183,23 @@ fn playing(
 
     // player movement //////////////////////////////////////////////////////////
     let player_command = {
-        MovementCommand::Platformer {
+        Some(MovementCommand::Platformer {
             dir: match (input.keyboard[A].is_down(), input.keyboard[D].is_down()) {
                 (false, true) => Some(Direction::Right),
                 (true, false) => Some(Direction::Left),
                 _             => None,
             },
             jump: input.keyboard[K].pressed(),
-        }
+        })
     };
-    if let MovementCommand::Platformer { dir: Some(dir), .. } = player_command {
+    if let Some(MovementCommand::Platformer { dir: Some(dir), .. }) = player_command {
         data.player.facing  = dir;
     }
     data.player.mov(&data.tilemap, player_command, dt);
 
     // enemy movement //////////////////////////////////////////////////////
     for enemy in data.enemies.iter_mut().filter(|x| x.health.hp > 0) {
-        let enemy_command = match enemy.health.knockback {
+        let enemy_command = Some(match enemy.health.knockback {
             Knockback::No if distance_sq(enemy.pos, data.player.pos) >= 16.0 => {
                 MovementCommand::Platformer {
                     dir: if enemy.pos.x < data.player.pos.x {
@@ -241,11 +241,11 @@ fn playing(
                     }
                 };
 
-                MovementCommand::Acceleration(v2!(0.0, 0.0))
+                MovementCommand::Platformer { dir: None, jump: false }
             },
-        };
-        if let MovementCommand::Platformer { dir: Some(dir), .. } = enemy_command {
-            enemy.facing  = dir;
+        });
+        if let Some(MovementCommand::Platformer { dir: Some(dir), .. }) = enemy_command {
+            enemy.facing = dir;
         }
         enemy.mov(&data.tilemap, enemy_command, input.dt);
     }
@@ -571,28 +571,30 @@ impl Entity {
         render::draw_bmp(screen, bmp, screen_pos - v2!(tile_size / 2));
     }
 
-    pub fn mov(&mut self, tilemap: &Tilemap, command: MovementCommand, dt: f32) {
-        // TODO: temporary
-        #[allow(clippy::single_match)]
-        match command {
-            MovementCommand::Platformer { dir, jump } => {
-                fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
-                    use Tile::Empty;
-                    if let (Some(Empty), Some(Empty)) = (tile0, tile1) {
-                        false
-                    } else {
-                        true
-                    }
-                }
+    pub fn mov(&mut self, tilemap: &Tilemap, command: Option<MovementCommand>, dt: f32) {
+        use MovementCommand::{Platformer, Velocity};
+        use MovementState::{OnTheGround, InTheAir};
+        use Direction::{Left, Right};
 
-                use MovementState::{OnTheGround, InTheAir};
-                use Direction::{Left, Right};
+        const MAX_VEL_X: f32 = 10.0;
+        const MAX_VEL_Y: f32 = 30.0;
 
+        fn is_obstacle(tile0: Option<Tile>, tile1: Option<Tile>) -> bool {
+            use Tile::Empty;
+            if let (Some(Empty), Some(Empty)) = (tile0, tile1) {
+                false
+            } else {
+                true
+            }
+        }
+
+        let (mut new_vel_x, mut new_vel_y) = match command {
+            Some(Platformer { dir, jump }) => {
                 const ACC_X: f32 = 100.0;
-                const MAX_VEL_X: f32 = 10.0;
+                const GRAVITY_ACC: f32 = -100.0;
+                const JUMP_VEL: f32 = 15.0;
 
-                // TODO: ground and air friction
-                let mut new_vel_x = {
+                let new_vel_x = {
                     let mut acc_x = match dir {
                         Some(Left) => -ACC_X,
                         Some(Right) => ACC_X,
@@ -607,53 +609,7 @@ impl Entity {
 
                     self.vel.x + 0.5 * acc_x * dt
                 };
-                let mut new_pos_x = self.pos.x + self.vel.x * dt;
-
-                let dx = new_pos_x - self.pos.x;
-                if dx != 0.0 {
-                    let top_y = self.pos.y + self.bottom_left_offset.y + self.size.y;
-                    let bottom_y = top_y - self.size.y;
-
-                    if dx > 0.0 {
-                        let right_x = (new_pos_x + self.bottom_left_offset.x + self.size.x).floor() as i32;
-
-                        let top_right_tile = tilemap.get(right_x, top_y.floor() as i32);
-                        let bottom_right_tile = tilemap.get(right_x, bottom_y.floor() as i32);
-
-                        if is_obstacle(top_right_tile, bottom_right_tile) {
-                            new_vel_x = 0.0;
-                            new_pos_x = right_x as f32 - (self.bottom_left_offset.x + self.size.x + 0.01);
-                        }
-                    } else if dx < 0.0 {
-                        let left_x = (new_pos_x + self.bottom_left_offset.x).floor() as i32;
-
-                        let top_left_tile = tilemap.get(left_x, top_y.floor() as i32);
-                        let bottom_left_tile = tilemap.get(left_x, bottom_y.floor() as i32);
-
-                        if is_obstacle(top_left_tile, bottom_left_tile) {
-                            new_vel_x = 0.0;
-                            new_pos_x = (left_x + 1) as f32 - self.bottom_left_offset.x + 0.01;
-                        }
-                    }
-                }
-
-                self.pos.x = new_pos_x;
-                self.vel.x = clamp(new_vel_x, -MAX_VEL_X, MAX_VEL_X);
-
-                // ground check //////////
-                if let OnTheGround = self.movement_state {
-                    let tile_under = tilemap.get(self.pos.x.floor() as i32, self.pos.y.floor() as i32 - 1);
-                    if let Some(Tile::Empty) = tile_under {
-                        self.movement_state = InTheAir { jumped_again: false };
-                    }
-                }
-                // ground check //////////
-
-                const GRAVITY_ACC: f32 = -100.0;
-                const JUMP_VEL: f32 = 15.0;
-                const MAX_VEL_Y: f32 = 30.0;
-
-                let mut new_vel_y = match self.movement_state {
+                let new_vel_y = match self.movement_state {
                     OnTheGround if jump => {
                         self.movement_state = InTheAir { jumped_again: false };
                         JUMP_VEL
@@ -665,44 +621,97 @@ impl Entity {
                     OnTheGround => 0.0,
                     _ => self.vel.y + 0.5 * GRAVITY_ACC * dt,
                 };
-                let mut new_pos_y = self.pos.y + self.vel.y * dt;
 
-                let dy = new_pos_y - self.pos.y;
-                if dy != 0.0 {
-                    let left_x = self.pos.x + self.bottom_left_offset.x;
-                    let right_x = left_x + self.size.x;
-
-                    if dy > 0.0 {
-                        let top_y = (new_pos_y + self.bottom_left_offset.y + self.size.y).floor() as i32;
-
-                        let top_left_tile = tilemap.get(left_x.floor() as i32, top_y);
-                        let top_right_tile = tilemap.get(right_x.floor() as i32, top_y);
-
-                        if is_obstacle(top_left_tile, top_right_tile) {
-                            new_vel_y = 0.0;
-                            new_pos_y = top_y as f32 - (self.bottom_left_offset.y + self.size.y + 0.01);
-                        }
-                    } else if dy < 0.0 {
-                        let bottom_y = (new_pos_y + self.bottom_left_offset.y).floor() as i32;
-
-                        let bottom_left_tile = tilemap.get(left_x.floor() as i32, bottom_y);
-                        let bottom_right_tile = tilemap.get(right_x.floor() as i32, bottom_y);
-
-                        if is_obstacle(bottom_left_tile, bottom_right_tile) {
-                            new_vel_y = 0.0;
-                            new_pos_y = (bottom_y + 1) as f32 - self.bottom_left_offset.y + 0.01;
-
-                            // hit the floor -> now on the ground
-                            self.movement_state = OnTheGround;
-                        }
-                    }
+                (new_vel_x, new_vel_y)
+            },
+            Some(Velocity(vel)) => {
+                if vel.y > 0.0 {
+                    self.movement_state = InTheAir { jumped_again: false };
                 }
 
-                self.pos.y = new_pos_y;
-                self.vel.y = clamp(new_vel_y, -MAX_VEL_Y, MAX_VEL_Y);
+                vel.into()
             },
-            _ => (),
+            None => (0.0, 0.0),
+        };
+
+        let mut new_pos_x = self.pos.x + self.vel.x * dt;
+
+        let dx = new_pos_x - self.pos.x;
+        if dx != 0.0 {
+            let top_y = self.pos.y + self.bottom_left_offset.y + self.size.y;
+            let bottom_y = top_y - self.size.y;
+
+            if dx > 0.0 {
+                let right_x = (new_pos_x + self.bottom_left_offset.x + self.size.x).floor() as i32;
+
+                let top_right_tile = tilemap.get(right_x, top_y.floor() as i32);
+                let bottom_right_tile = tilemap.get(right_x, bottom_y.floor() as i32);
+
+                if is_obstacle(top_right_tile, bottom_right_tile) {
+                    new_vel_x = 0.0;
+                    new_pos_x = right_x as f32 - (self.bottom_left_offset.x + self.size.x + 0.01);
+                }
+            } else if dx < 0.0 {
+                let left_x = (new_pos_x + self.bottom_left_offset.x).floor() as i32;
+
+                let top_left_tile = tilemap.get(left_x, top_y.floor() as i32);
+                let bottom_left_tile = tilemap.get(left_x, bottom_y.floor() as i32);
+
+                if is_obstacle(top_left_tile, bottom_left_tile) {
+                    new_vel_x = 0.0;
+                    new_pos_x = (left_x + 1) as f32 - self.bottom_left_offset.x + 0.01;
+                }
+            }
         }
+
+        self.vel.x = clamp(new_vel_x, -MAX_VEL_X, MAX_VEL_X);
+        self.pos.x = new_pos_x;
+
+
+        let mut new_pos_y = self.pos.y + self.vel.y * dt;
+
+        let dy = new_pos_y - self.pos.y;
+        if dy != 0.0 {
+            let left_x = self.pos.x + self.bottom_left_offset.x;
+            let right_x = left_x + self.size.x;
+
+            if dy > 0.0 {
+                let top_y = (new_pos_y + self.bottom_left_offset.y + self.size.y).floor() as i32;
+
+                let top_left_tile = tilemap.get(left_x.floor() as i32, top_y);
+                let top_right_tile = tilemap.get(right_x.floor() as i32, top_y);
+
+                if is_obstacle(top_left_tile, top_right_tile) {
+                    new_vel_y = 0.0;
+                    new_pos_y = top_y as f32 - (self.bottom_left_offset.y + self.size.y + 0.01);
+                }
+            } else if dy < 0.0 {
+                let bottom_y = (new_pos_y + self.bottom_left_offset.y).floor() as i32;
+
+                let bottom_left_tile = tilemap.get(left_x.floor() as i32, bottom_y);
+                let bottom_right_tile = tilemap.get(right_x.floor() as i32, bottom_y);
+
+                if is_obstacle(bottom_left_tile, bottom_right_tile) {
+                    new_vel_y = 0.0;
+                    new_pos_y = (bottom_y + 1) as f32 - self.bottom_left_offset.y + 0.01;
+
+                    // hit the floor -> now on the ground
+                    self.movement_state = OnTheGround;
+                }
+            }
+        }
+
+        self.vel.y = clamp(new_vel_y, -MAX_VEL_Y, MAX_VEL_Y);
+        self.pos.y = new_pos_y;
+
+        // ground check //////////
+        if let OnTheGround = self.movement_state {
+            let tile_under = tilemap.get(self.pos.x.floor() as i32, self.pos.y.floor() as i32 - 1);
+            if let Some(Tile::Empty) = tile_under {
+                self.movement_state = InTheAir { jumped_again: false };
+            }
+        }
+        // ground check //////////
     }
 }
 
@@ -724,7 +733,6 @@ impl std::fmt::Display for Entity {
 
 #[derive(Copy, Clone, Debug)]
 enum MovementCommand {
-    Acceleration(V2f),
     Velocity(V2f),
     Platformer { dir: Option<Direction>, jump: bool },
 }
@@ -818,6 +826,7 @@ fn v_tilemap_collision(entity: &Entity, tilemap: &Tilemap, dy: f32) -> Option<i3
     let from_y = (entity.pos.y + offset).floor() as i32;
     let to_y = (entity.pos.y + offset + dy).floor() as i32;
 
+    // FIXME: while loop
     let mut tile_y = from_y;
     loop {
         if is_obstacle(
