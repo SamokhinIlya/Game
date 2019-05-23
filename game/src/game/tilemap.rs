@@ -299,13 +299,13 @@ impl Load for Tilemap {
         let mut map = Vec::<Tile>::with_capacity(tilemap_size);
         map.resize_with(tilemap_size, || unsafe { uninit() });
 
-        let map_bytes = unsafe {
+        let map_as_bytes = unsafe {
             std::slice::from_raw_parts_mut(
                 map.as_mut_ptr() as *mut u8,
                 tilemap_size * size_of::<Tile>()
             )
         };
-        map_bytes.copy_from_slice(&file[size_of::<TilemapSize>()..]);
+        map_as_bytes.copy_from_slice(&file[size_of::<TilemapSize>()..]);
 
         Ok(Self {
             width: width as i32,
@@ -324,22 +324,23 @@ impl Save for Tilemap {
                 width: self.width as u32,
                 height: self.height as u32,
             };
-            let tilemap_size_bytes = unsafe {
+            let tilemap_size_as_bytes = unsafe {
                 std::slice::from_raw_parts(
                     &tilemap_size as *const _ as *const u8,
                     size_of::<TilemapSize>(),
                 )
             };
-            let tilemap_bytes = unsafe {
+            let tilemap_as_bytes = unsafe {
                 &*(self.map.as_slice() as *const _ as *const [u8])
             };
+
             let filesize = size_of::<TilemapSize>() + self.map.len() / size_of::<Tile>();
 
             let mut bytes = Vec::<u8>::with_capacity(filesize);
             bytes.resize_with(filesize, || unsafe { uninit() });
 
-            bytes[..size_of::<TilemapSize>()].copy_from_slice(tilemap_size_bytes);
-            bytes[size_of::<TilemapSize>()..].copy_from_slice(tilemap_bytes);
+            bytes[..size_of::<TilemapSize>()].copy_from_slice(tilemap_size_as_bytes);
+            bytes[size_of::<TilemapSize>()..].copy_from_slice(tilemap_as_bytes);
             bytes
         };
         crate::file::write_bytes_to_file(filepath, to_file.as_slice())
