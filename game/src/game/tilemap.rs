@@ -106,7 +106,7 @@ impl Tilemap {
 
     fn check(&self, x: i32, y: i32) {
         assert!(
-            x >= 0 && x < self.width && y >= 0 && y < self.height,
+            (0..self.width).contains(&x) && (0..self.height).contains(&y),
             "Tilemap index out of bounds. (w, h): {:?}, (x, y): {:?}",
             (self.width, self.height), (x, y),
         );
@@ -123,7 +123,7 @@ impl Tilemap {
     }
 
     pub fn get(&self, x: i32, y: i32) -> Option<Tile> {
-        if x >= 0 && x < self.width && y >= 0 && y < self.height {
+        if (0..self.width).contains(&x) && (0..self.height).contains(&y) {
             Some(self[(x, y)])
         } else {
             None
@@ -232,7 +232,7 @@ impl Tilemap {
                 dst.dim(),
                 info.size,
             );
-            if min.y < 0 || min.y >= dst.height() {
+            if !(0..dst.height()).contains(&min.y) {
                 continue;
             }
             min.x = clamp(min.x, 0, dst.width());
@@ -258,7 +258,7 @@ impl Tilemap {
                 dst.dim(),
                 info.size,
             );
-            if min.x < 0 || min.x >= dst.width() {
+            if !(0..dst.width()).contains(&min.x) {
                 continue;
             }
             min.y = clamp(min.y, 0, dst.height());
