@@ -23,9 +23,9 @@ pub fn fill_rect(dst_bmp: &Bitmap, mut min: V2i, mut max: V2i, color: Color) {
     }
 }
 
-//FIXME: if left or top edge is in bounds,
-//       but same edge + thickness is out of bounds,
-//       function panics
+///FIXME: if left or top edge is in bounds,
+///       but same edge + thickness is out of bounds,
+///       function panics
 pub fn draw_rect(
     dst: &mut Bitmap,
     mut min: V2i,

@@ -101,6 +101,108 @@ impl Bitmap {
         );
         self.data.add(y * self.width as usize + x)
     }
+
+    pub fn load(filepath: impl AsRef<Path>) -> Result {
+        let file_extension = filepath.as_ref().extension()
+            .ok_or(BitmapLoadError::NoFileExtension)?;
+
+        return match file_extension {
+            ext if ext == "bmp" => load_bmp(filepath),
+            ext if ext == "png" => load_png(filepath),
+            _ => Err(BitmapLoadError::UnsupportedFormat),
+        };
+
+        fn load_png(filepath: impl AsRef<Path>) -> Result {
+            let mut png = lodepng::decode32(read_entire_file(filepath)?)?;
+
+            for x in &mut png.buffer {
+                let rgba = *x;
+                *x = rgb::RGBA8 {
+                    r: rgba.b,
+                    g: rgba.g,
+                    b: rgba.r,
+                    a: rgba.a,
+                };
+            }
+
+            let data = png.buffer.as_mut_ptr() as *mut u32;
+            let width = png.width as i32;
+            let height = png.height as i32;
+            mem::forget(png);
+
+            Ok(Bitmap { data, width, height })
+        }
+
+        fn load_bmp(filepath: impl AsRef<Path>) -> Result {
+            use file_header::bmp::*;
+
+            let file = read_entire_file(filepath)?;
+            let header: BitmapHeader = unsafe { ptr::read_unaligned(file.as_ptr() as *const _) };
+            assert!(header.BITMAPFILEHEADER.bfType == unsafe { mem::transmute(*b"BM") });
+
+            let bmp_data = {
+                let mut vec = Vec::<u32>::with_capacity(
+                    header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>()
+                );
+                let ptr = vec.as_mut_ptr();
+                mem::forget(vec);
+                ptr
+            };
+            let bmp_width = header.BITMAPV5HEADER.bV5Width;
+            let bmp_height = header.BITMAPV5HEADER.bV5Height;
+
+            let mut dst_row: *mut u32 = bmp_data;
+
+            #[allow(clippy::cast_ptr_alignment)]
+            let mut src_row: *mut u32 = unsafe {
+                let end_row_offset = header.BITMAPFILEHEADER.bfOffBits as usize
+                    + ((bmp_height - 1) * bmp_width) as usize * size_of::<u32>();
+                file.as_ptr().add(end_row_offset) as *mut u32
+            };
+
+            unsafe {
+                for _y in 0..bmp_height {
+                    let mut dst = dst_row;
+                    let mut src = src_row;
+                    for _x in 0..bmp_width {
+                        ptr::write_unaligned(dst, *src);
+                        dst = dst.add(1);
+                        src = src.add(1);
+                    }
+                    dst_row = dst_row.add(bmp_width as usize);
+                    src_row = src_row.sub(bmp_width as usize);
+                }
+            }
+
+            Ok(Bitmap {
+                data: bmp_data,
+                width: bmp_width,
+                height: bmp_height,
+            })
+        }
+    }
+}
+
+pub type Result = std::result::Result<Bitmap, BitmapLoadError>;
+
+#[derive(Debug)]
+pub enum BitmapLoadError {
+    IoError(std::io::Error),
+    PngError(&'static str),
+    UnsupportedFormat,
+    NoFileExtension,
+}
+
+impl From<std::io::Error> for BitmapLoadError {
+    fn from(err: std::io::Error) -> Self {
+        BitmapLoadError::IoError(err)
+    }
+}
+
+impl From<lodepng::ffi::Error> for BitmapLoadError {
+    fn from(err: lodepng::ffi::Error) -> Self {
+        BitmapLoadError::PngError(err.as_str())
+    }
 }
 
 pub struct BitmapView<'a> {
@@ -125,58 +227,6 @@ impl<'a> Iterator for BitmapView<'a> {
     }
 }
 
-impl Load for Bitmap {
-    fn load(filepath: impl AsRef<Path>) -> io::Result<Self> {
-        use bitmap_headers::*;
-
-        let file = read_entire_file(filepath)?;
-        let header = unsafe {
-            ptr::read_unaligned(file.as_ptr() as *const BitmapHeader)
-        };
-        assert!(header.BITMAPFILEHEADER.bfType == unsafe { mem::transmute(*b"BM") });
-
-        let bmp_data = {
-            let mut vec = Vec::<u32>::with_capacity(
-                header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>()
-            );
-            let ptr = vec.as_mut_ptr();
-            mem::forget(vec);
-            ptr
-        };
-        let bmp_width = header.BITMAPV5HEADER.bV5Width;
-        let bmp_height = header.BITMAPV5HEADER.bV5Height;
-
-        let mut dst_row: *mut u32 = bmp_data;
-
-        #[allow(clippy::cast_ptr_alignment)]
-        let mut src_row: *mut u32 = unsafe {
-            let end_row_offset = header.BITMAPFILEHEADER.bfOffBits as usize
-                + ((bmp_height - 1) * bmp_width) as usize * size_of::<u32>();
-            file.as_ptr().add(end_row_offset) as *mut u32
-        };
-
-        unsafe {
-            for _y in 0..bmp_height {
-                let mut dst = dst_row;
-                let mut src = src_row; 
-                for _x in 0..bmp_width {
-                    ptr::write_unaligned(dst, *src);
-                    dst = dst.add(1);
-                    src = src.add(1);
-                }
-                dst_row = dst_row.add(bmp_width as usize);
-                src_row = src_row.sub(bmp_width as usize);
-            }
-        }
-
-        Ok(Self {
-            data: bmp_data,
-            width: bmp_width,
-            height: bmp_height,
-        })
-    }
-}
-
 impl From<platform::graphics::WindowBuffer> for Bitmap {
     fn from(window_buffer: platform::graphics::WindowBuffer) -> Self {
         #[allow(clippy::cast_ptr_alignment)]
@@ -188,53 +238,55 @@ impl From<platform::graphics::WindowBuffer> for Bitmap {
     }
 }
 
-#[allow(non_snake_case)]
-mod bitmap_headers {
-    #[repr(C, packed)]
-    #[derive(Copy, Clone, Debug)]
-    pub struct BitmapHeader {
-        pub BITMAPFILEHEADER: BITMAPFILEHEADER,
-        pub BITMAPV5HEADER: BITMAPV5HEADER,
-    }
+mod file_header {
+    #[allow(non_snake_case)]
+    pub mod bmp {
+        #[repr(C, packed)]
+        #[derive(Copy, Clone, Debug)]
+        pub struct BitmapHeader {
+            pub BITMAPFILEHEADER: BITMAPFILEHEADER,
+            pub BITMAPV5HEADER: BITMAPV5HEADER,
+        }
 
-    #[repr(C, packed)]
-    #[derive(Copy, Clone, Debug)]
-    pub struct BITMAPFILEHEADER {
-        pub bfType: u16,
-        pub bfSize: u32,
-        pub bfReserved1: u16,
-        pub bfReserved2: u16,
-        pub bfOffBits: u32,
-    }
+        #[repr(C, packed)]
+        #[derive(Copy, Clone, Debug)]
+        pub struct BITMAPFILEHEADER {
+            pub bfType: u16,
+            pub bfSize: u32,
+            pub bfReserved1: u16,
+            pub bfReserved2: u16,
+            pub bfOffBits: u32,
+        }
 
-    #[repr(C, packed)]
-    #[derive(Copy, Clone, Debug)]
-    pub struct BITMAPV5HEADER {
-        pub bV5Size: u32,
-        pub bV5Width: i32,
-        pub bV5Height: i32,
-        pub bV5Planes: u16,
-        pub bV5BitCount: u16,
-        pub bV5Compression: u32,
-        pub bV5SizeImage: u32,
-        pub bV5XPelsPerMeter: i32,
-        pub bV5YPelsPerMeter: i32,
-        pub bV5ClrUsed: u32,
-        pub bV5ClrImportant: u32,
-        pub bV5RedMask: u32,
-        pub bV5GreenMask: u32,
-        pub bV5BlueMask: u32,
-        pub bV5AlphaMask: u32,
-        /*
-        pub bV5CSType: u32       ,
-        pub bV5Endpoints: CIEXYZTRIPLE,
-        pub bV5GammaRed: u32       ,
-        pub bV5GammaGreen: u32       ,
-        pub bV5GammaBlue: u32       ,
-        pub bV5Intent: u32       ,
-        pub bV5ProfileData: u32       ,
-        pub bV5ProfileSize: u32       ,
-        pub bV5Reserved: u32       ,
-        */
+        #[repr(C, packed)]
+        #[derive(Copy, Clone, Debug)]
+        pub struct BITMAPV5HEADER {
+            pub bV5Size: u32,
+            pub bV5Width: i32,
+            pub bV5Height: i32,
+            pub bV5Planes: u16,
+            pub bV5BitCount: u16,
+            pub bV5Compression: u32,
+            pub bV5SizeImage: u32,
+            pub bV5XPelsPerMeter: i32,
+            pub bV5YPelsPerMeter: i32,
+            pub bV5ClrUsed: u32,
+            pub bV5ClrImportant: u32,
+            pub bV5RedMask: u32,
+            pub bV5GreenMask: u32,
+            pub bV5BlueMask: u32,
+            pub bV5AlphaMask: u32,
+            /*
+            pub bV5CSType: u32       ,
+            pub bV5Endpoints: CIEXYZTRIPLE,
+            pub bV5GammaRed: u32       ,
+            pub bV5GammaGreen: u32       ,
+            pub bV5GammaBlue: u32       ,
+            pub bV5Intent: u32       ,
+            pub bV5ProfileData: u32       ,
+            pub bV5ProfileSize: u32       ,
+            pub bV5Reserved: u32       ,
+            */
+        }
     }
 }

@@ -1,37 +1,38 @@
-use utils::clamp;
-
+#[repr(C)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Color {
-    data: u32,
+    b: u8,
+    g: u8,
+    r: u8,
+    a: u8,
 }
 
 impl From<Color> for u32 {
-    fn from(color: Color) -> Self {
-        color.data
+    fn from(c: Color) -> Self {
+        unsafe { std::mem::transmute(c) }
     }
 }
 
 #[allow(dead_code)]
 impl Color {
-    pub fn rgb(mut r: f32, mut g: f32, mut b: f32) -> Self {
-        r = clamp(r, 0.0, 1.0);
-        g = clamp(g, 0.0, 1.0);
-        b = clamp(b, 0.0, 1.0);
+    pub fn rgb(r: f32, g: f32, b: f32) -> Self {
+        assert!((0.0..=1.0).contains(&r), "Color::rgb: r = {} (must be from 0.0 to 1.0)", r);
+        assert!((0.0..=1.0).contains(&g), "Color::rgb: g = {} (must be from 0.0 to 1.0)", g);
+        assert!((0.0..=1.0).contains(&b), "Color::rgb: b = {} (must be from 0.0 to 1.0)", b);
 
-        let data = Self::A_MASK
-            | ((r * 255.0).round() as u32) << 16
-            | ((g * 255.0).round() as u32) << 8
-            | (b * 255.0).round() as u32;
-
-        Self { data }
+        Self {
+            a: 0xFF,
+            r: (r * 255.0).round() as u8,
+            g: (g * 255.0).round() as u8,
+            b: (b * 255.0).round() as u8,
+        }
     }
 
-    pub fn argb(mut a: f32, r: f32, g: f32, b: f32) -> Self {
+    pub fn argb(a: f32, r: f32, g: f32, b: f32) -> Self {
+        assert!((0.0..=1.0).contains(&a), "Color::rgb: a = {} (must be from 0.0 to 1.0)", a);
+
         let mut color = Self::rgb(r, g, b);
-        a = clamp(a, 0.0, 1.0);
-        let alpha = ((a * 255.0).round() as u32) << 24;
-        color.data &= !Self::A_MASK;
-        color.data |= alpha;
+        color.a = (a * 255.0).round() as u8;
         color
     }
 
@@ -40,21 +41,46 @@ impl Color {
     pub const G_MASK: u32 = 0x0000_FF00;
     pub const B_MASK: u32 = 0x0000_00FF;
 
-    pub const TRANSPARENT: Self = Self { data: 0 };
-    pub const BLACK: Self = Self { data: Self::A_MASK };
+    pub const TRANSPARENT: Self = Self {
+        b: 0x00,
+        g: 0x00,
+        r: 0x00,
+        a: 0x00,
+    };
+    pub const BLACK: Self = Self {
+        b: 0x00,
+        g: 0x00,
+        r: 0x00,
+        a: 0xFF,
+    };
     pub const WHITE: Self = Self {
-        data: Self::A_MASK | Self::R_MASK | Self::G_MASK | Self::B_MASK,
+        b: 0xFF,
+        g: 0xFF,
+        r: 0xFF,
+        a: 0xFF,
     };
     pub const YELLOW: Self = Self {
-        data: Self::A_MASK | Self::R_MASK | Self::G_MASK,
+        b: 0x00,
+        g: 0xFF,
+        r: 0xFF,
+        a: 0xFF,
     };
     pub const RED: Self = Self {
-        data: Self::A_MASK | Self::R_MASK,
+        b: 0x00,
+        g: 0x00,
+        r: 0xFF,
+        a: 0xFF,
     };
     pub const PURPLE: Self = Self {
-        data: Self::A_MASK | Self::R_MASK | Self::B_MASK,
+        b: 0xFF,
+        g: 0x00,
+        r: 0xFF,
+        a: 0xFF,
     };
     pub const GREY: Self = Self {
-        data: Self::A_MASK | 0x007F_7F7F,
+        b: 0xFF / 2,
+        g: 0xFF / 2,
+        r: 0xFF / 2,
+        a: 0xFF,
     };
 }

@@ -9,7 +9,7 @@ use super::{
     draw_bmp,
 };
 
-//TODO: if height is smaller that 20 letters are barely visible
+//TODO: if height is smaller than 20, letters are barely visible
 pub struct FontBitmaps {
     chars: HashMap<char, Bitmap>,
     height: i32,
@@ -17,6 +17,10 @@ pub struct FontBitmaps {
 
 impl FontBitmaps {
     pub fn height(&self) -> i32 { self.height }
+
+    pub fn width(&self, s: &str) -> i32 {
+        self.to_bitmaps(s).map(|bmp| bmp.width()).sum()
+    }
 
     /// Draws string of text to the dst `Bitmap`
     /// 
@@ -30,20 +34,16 @@ impl FontBitmaps {
         current_x - x
     }
 
-    pub fn width(&self, s: &str) -> i32 {
-        self.to_bitmaps(s).map(|bmp| bmp.width()).sum()
+    fn to_bitmaps<'slf, 'str, 'res>(&'slf self, s: &'str str) -> impl Iterator<Item = &'res Bitmap>
+        where 'slf: 'res,
+              'str: 'res
+    {
+        s.chars().map(move |c|
+            self.chars.get(&c).unwrap_or_else(|| panic!("No bitmap for character: {}", c))
+        )
     }
 
-    fn to_bitmaps<'res, 'a, 'b>(&'a self, s: &'b str) -> impl Iterator<Item = &'res Bitmap>
-        where 'a: 'res, 'b: 'res
-    {
-        s.chars().map(move |c| self.chars.get(&c).unwrap_or_else(
-            || panic!("No bitmap for character: {}", c)))
-    }
-
-    pub fn new<P>(filepath: P, height: i32) -> std::io::Result<Self>
-        where P: AsRef<Path>
-    {
+    pub fn new(filepath: impl AsRef<Path>, height: i32) -> std::io::Result<Self> {
         use rusttype::{point, FontCollection, PositionedGlyph, Scale};
 
         let font = {
@@ -74,6 +74,7 @@ impl FontBitmaps {
                 let width = bbox.max.x - bbox.min.x;
                 let mut bmp = Bitmap::with_dimensions(width, height).filled(Color::TRANSPARENT);
                 g.draw(|x, y, v| {
+                    let v = utils::clamp(v, 0.0, 1.0);
                     let x = x as i32;
                     let y = y as i32 + (bbox.min.y as i32);
                     bmp[(x, y)] = Color::argb(v, 1.0, 1.0, 1.0).into();
