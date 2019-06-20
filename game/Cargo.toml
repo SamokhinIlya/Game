@@ -7,4 +7,7 @@ edition = "2018"
 [dependencies]
 utils = { path = "../utils" }
 platform = { path = "../platform" }
+
 rusttype = "*"
+lodepng = "2.4.2"
+rgb = "0.8.13"
