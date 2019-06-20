@@ -407,8 +407,8 @@ fn level_editor(
         data.tile_info.size,
     ).trunc().into();
 
-    let mouse_pos_textbox: Option<(String, V2i)> = if in_range(mouse_pos.0, 0..screen.width())
-        && in_range(mouse_pos.1, 0..screen.height())
+    let mouse_pos_textbox: Option<(String, V2i)> = if (0..screen.width()).contains(&mouse_pos.0)
+        && (0..screen.height()).contains(&mouse_pos.1)
     {
         let pos: V2i = mouse_pos.into();
         let margin = v2!(10);
@@ -440,8 +440,8 @@ fn level_editor(
     };
 
     if let Some(tile) = maybe_tile {
-        if in_range(mouse.x, 0..data.tilemap.width())
-            && in_range(mouse.y, 0..data.tilemap.height())
+        if (0..data.tilemap.width()).contains(&mouse.x)
+            && (0..data.tilemap.height()).contains(&mouse.y)
         {
             data.tilemap[(mouse.x, mouse.y)] = tile;
         }
