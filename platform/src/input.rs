@@ -1,13 +1,49 @@
-use core::{
-    default::Default,
-    ops::{Index, IndexMut},
-};
+use std::ops::{Index, IndexMut};
 
 #[derive(Default)]
 pub struct Input {
     pub keyboard: KeyboardState,
     pub mouse: MouseState,
-    pub dt: f32,
+}
+
+impl Input {
+    pub fn update(&mut self, window: &crate::window::Window) {
+        use std::mem::MaybeUninit;
+        use winapi::um::winuser::{
+            GetAsyncKeyState, GetCursorPos, ScreenToClient,
+            VK_LBUTTON, VK_RBUTTON, VK_MBUTTON,
+        };
+
+        for &key in KBKey::variants() {
+            let key_state = unsafe { GetAsyncKeyState(key as _) };
+            let is_down = key_state < 0;
+            self.keyboard[key].update(is_down);
+        }
+
+        let mouse_pos = {
+            let mut mouse_point = MaybeUninit::uninit();
+            win_assert_non_zero! {
+                GetCursorPos(mouse_point.as_mut_ptr());
+                ScreenToClient(window.handle(), mouse_point.as_mut_ptr());
+            };
+            unsafe { mouse_point.assume_init() }
+        };
+
+        self.mouse.x = mouse_pos.x;
+        self.mouse.y = mouse_pos.y;
+        self.mouse[MouseKey::LB].update(unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0);
+        self.mouse[MouseKey::RB].update(unsafe { GetAsyncKeyState(VK_RBUTTON) } < 0);
+        self.mouse[MouseKey::MB].update(unsafe { GetAsyncKeyState(VK_MBUTTON) } < 0);
+    }
+
+    pub fn reset(&mut self) {
+        for &key in KBKey::variants() {
+            self.keyboard[key].update(false);
+        }
+        self.mouse[MouseKey::LB].update(false);
+        self.mouse[MouseKey::RB].update(false);
+        self.mouse[MouseKey::MB].update(false);
+    }
 }
 
 pub struct KeyboardState {
@@ -80,7 +116,7 @@ impl DigitalKey {
     #[inline(always)] pub fn released(self) -> bool { !self.curr && self.prev }
 
     #[inline(always)]
-    pub fn update(&mut self, new: bool) {
+    fn update(&mut self, new: bool) {
         self.prev = self.curr;
         self.curr = new;
     }

@@ -9,12 +9,16 @@ impl WindowBuffer {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         assert!(width > 0 && height > 0);
 
-        let data = {
-            let mut vec = Vec::<u32>::with_capacity(width as usize * height as usize);
-            let ptr = vec.as_mut_ptr();
-            core::mem::forget(vec);
+        use std::alloc::{alloc, Layout};
+        use std::mem::{size_of, align_of};
 
-            ptr
+        let data = unsafe {
+            alloc(
+                Layout::from_size_align_unchecked(
+                    width as usize * height as usize * size_of::<u32>(),
+                    align_of::<u32>(),
+                )
+            ) as *mut u32
         };
 
         Self { data, width, height }
