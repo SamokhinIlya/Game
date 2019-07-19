@@ -48,6 +48,7 @@ impl TileInfo {
 
 // Tile
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub enum Tile {
     Empty = 0,
@@ -277,8 +278,8 @@ impl Tilemap {
 }
 
 /// For saving/loading to/from file
+#[repr(C)]
 #[derive(Copy, Clone)]
-#[repr(packed)]
 struct TilemapSize {
     width: u32,
     height: u32,
@@ -292,7 +293,7 @@ impl Load for Tilemap {
 
         #[allow(clippy::cast_ptr_alignment)]
         let TilemapSize { width, height } = unsafe {
-            *(&file[..size_of::<TilemapSize>()] as *const _ as *const TilemapSize)
+            std::ptr::read_unaligned(file.as_ptr() as *const _)
         };
         let tilemap_size = (width * height) as usize;
 

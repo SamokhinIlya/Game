@@ -45,6 +45,7 @@ struct GameData {
     pub camera_pos: V2f,
 
     pub player: Entity,
+    pub hook: Entity,
 
     pub player_attack_counter: f32,
 
@@ -63,36 +64,51 @@ struct GameData {
 struct PlayerBmps {
     pub right: Bitmap,
     pub left: Bitmap,
-    pub attack_right: Bitmap,
-    pub attack_left: Bitmap,
+    pub hook: Bitmap,
 }
 
 pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
+    const SPRITE_FOLDER: &str = "data/sprites/size_64/";
+    let tile_size = 64;
+    let hook_bmp = Bitmap::load(format!("{}{}", SPRITE_FOLDER, "hook.png")).unwrap();
+
     let result = Box::new(GameData {
         state: GameState::LevelEditor,
         tilemap: Tilemap::load("data/levels/map_00").unwrap_or_else(|_| Tilemap::new(15, 15)),
         tile_info: TileInfo {
-            size: 64,
+            size: tile_size,
             screen_width: 0.0,
             screen_height: 0.0,
             screen_width_in_px: 0,
             screen_height_in_px: 0,
-            bmps: [Bitmap::load("data/sprites/size_64/test_ground.png").unwrap(); 1],
+            bmps: [Bitmap::load(format!("{}{}", SPRITE_FOLDER, "test_ground.png")).unwrap(); 1],
         },
         camera_pos: v2!(0.0, 0.0),
-        player: Entity::with_pos_health(v2!(2.5, 2.5), 1),
+
+        player: Entity::new_character(v2!(2.5, 2.5), 1),
+        hook: {
+            let pixel_size = 1.0 / tile_size as f32;
+
+            let width = pixel_size * hook_bmp.width() as f32;
+            let height = pixel_size * hook_bmp.height() as f32;
+
+            Entity::new_thing(
+                v2!(2.5, 2.5),
+                v2!(width / 2.0, height / 2.0),
+                v2!(width, height),
+            )
+        },
 
         player_attack_counter: 0.0,
 
-        enemies: [Entity::with_pos_health(v2!(3.5, 1.5), 5); 1],
+        enemies: [Entity::new_character(v2!(3.5, 1.5), 5); 1],
         player_bmps: PlayerBmps {
-            right: Bitmap::load("data/sprites/size_64/test_player_right.png").unwrap(),
-            left: Bitmap::load("data/sprites/size_64/test_player_left.png").unwrap(),
-            attack_right: Bitmap::load("data/sprites/size_64/hook.png").unwrap(),
-            attack_left: Bitmap::load("data/sprites/size_64/hook.png").unwrap(),
+            right: Bitmap::load(format!("{}{}", SPRITE_FOLDER, "test_player_right.png")).unwrap(),
+            left: Bitmap::load(format!("{}{}", SPRITE_FOLDER, "test_player_left.png")).unwrap(),
+            hook: hook_bmp,
         },
-        enemy_bmp_right: Bitmap::load("data/sprites/size_64/test_enemy_right.png").unwrap(),
-        enemy_bmp_left: Bitmap::load("data/sprites/size_64/test_enemy_left.png").unwrap(),
+        enemy_bmp_right: Bitmap::load(format!("{}{}", SPRITE_FOLDER, "test_enemy_right.png")).unwrap(),
+        enemy_bmp_left: Bitmap::load(format!("{}{}", SPRITE_FOLDER, "test_enemy_left.png")).unwrap(),
         font_bmp: render::text::FontBitmaps::new("data/fonts/Inconsolata-Regular.ttf", 20).unwrap(),
         collision_box_color_counter: 0.0,
         collision_box_color: Color::WHITE,
@@ -102,10 +118,12 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
 }
 
 pub fn update_and_render(
+    game_data:     *mut (),
+    window:        &mut platform::window::Window,
     window_buffer: platform::graphics::WindowBuffer,
     input:         &Input,
-    game_data:     *mut (),
-) -> String {
+    dt:            f32,
+) {
     let mut window_bmp = Bitmap::from(window_buffer);
 
     #[allow(clippy::cast_ptr_alignment)]
@@ -113,7 +131,11 @@ pub fn update_and_render(
         &mut *(game_data as *mut GameData)
     };
 
-    let dt = input.dt;
+    if (input.keyboard[KBKey::Alt].is_down() && input.keyboard[KBKey::Enter].pressed())
+        || input.keyboard[KBKey::F11].pressed()
+    {
+        window.toggle_fullscreen();
+    }
 
     if data.tile_info.screen_width_in_px != window_bmp.width() {
         data.tile_info.screen_width_in_px = window_bmp.width();
@@ -131,9 +153,22 @@ pub fn update_and_render(
         GameState::LevelEditor => level_editor(&mut window_bmp, input, data, dt),
     };
 
-    std::mem::forget(window_bmp);
+    let mut str_buffer: [u8; 256] = unsafe {
+        std::mem::MaybeUninit::uninit().assume_init()
+    };
+    use std::io::Write;
+    write!(
+        &mut str_buffer[..],
+        "frame: {:>3.3} ms, {:>2.2} fps || {}\0",
+        dt,
+        dt.recip(),
+        info,
+    ).unwrap();
+    unsafe {
+        window.set_title(&str_buffer);
+    }
 
-    info
+    std::mem::forget(window_bmp);
 }
 
 #[allow(clippy::useless_format)]
@@ -165,10 +200,9 @@ fn playing(
             Direction::Left => v2!(-1.0, 0.0),
             Direction::Right => v2!(1.0, 0.0),
         });
-        let alive_colliding_enemies = data.enemies.iter_mut()
-            .filter(|foe| foe.health.hp > 0 && aabb_collision(attack_rect, foe.rect()));
-        for enemy in alive_colliding_enemies {
-            match enemy.health.knockback {
+        data.enemies.iter_mut()
+            .filter(|foe| foe.health.hp > 0 && aabb_collision(attack_rect, foe.rect()))
+            .for_each(|enemy| match enemy.health.knockback {
                 Knockback::Knocked { .. } => (),
                 Knockback::No => {
                     enemy.health.hp -= 1;
@@ -177,21 +211,18 @@ fn playing(
                         just_hit: true,
                     };
                 },
-            }
-        }
+            });
     }
 
     // player movement //////////////////////////////////////////////////////////
-    let player_command = {
-        Some(MovementCommand::Platformer {
-            dir: match (input.keyboard[A].is_down(), input.keyboard[D].is_down()) {
-                (false, true) => Some(Direction::Right),
-                (true, false) => Some(Direction::Left),
-                _             => None,
-            },
-            jump: input.keyboard[K].pressed(),
-        })
-    };
+    let player_command = Some(MovementCommand::Platformer {
+        dir: match (input.keyboard[A].is_down(), input.keyboard[D].is_down()) {
+            (false, true) => Some(Direction::Right),
+            (true, false) => Some(Direction::Left),
+            _             => None,
+        },
+        jump: input.keyboard[K].pressed(),
+    });
     if let Some(MovementCommand::Platformer { dir: Some(dir), .. }) = player_command {
         data.player.facing  = dir;
     }
@@ -247,7 +278,7 @@ fn playing(
         if let Some(MovementCommand::Platformer { dir: Some(dir), .. }) = enemy_command {
             enemy.facing = dir;
         }
-        enemy.mov(&data.tilemap, enemy_command, input.dt);
+        enemy.mov(&data.tilemap, enemy_command, dt);
     }
 
     ///////////////////////////////////////////////////////////////
@@ -311,10 +342,7 @@ fn playing(
     }
 
     if data.player_attack_counter > 0.0 {
-        let bmp = match data.player.facing {
-            Direction::Left => &data.player_bmps.attack_left,
-            Direction::Right => &data.player_bmps.attack_right,
-        };
+        let bmp = &data.player_bmps.hook;
         let attack_pos = match data.player.facing {
             Direction::Left => data.player.rect().top_left() - v2!(1.0, 0.0),
             Direction::Right => data.player.rect().top_left() + v2!(1.0, 0.0),
@@ -529,25 +557,36 @@ struct Entity {
     pub bottom_left_offset: V2f,
     pub size: V2f,
 
-    pub facing : Direction,
+    pub facing: Direction,
     pub health: Health,
     pub movement_state: MovementState,
 }
 
 impl Entity {
-    pub fn new() -> Self {
+    // TODO: replace V2f with impl Into<V2f>
+    pub fn new_entity(pos: V2f, bottom_left_offset: V2f, size: V2f, hp: i32) -> Self {
         Self {
-            pos: v2!(1.5, 1.5),
+            pos,
             vel: v2!(0.0, 0.0),
 
-            // TODO: something about this hardcoding
-            bottom_left_offset: v2!(-(0.75 * 0.5), -(0.5 - 0.001)),
-            size: v2!(0.75, (0.5 - 0.001) + (0.5 - 1.0 / 9.0)),
+            bottom_left_offset,
+            size,
 
-            health: Health { hp: 1, knockback: Knockback::No },
+            health: Health { hp, knockback: Knockback::No },
             facing: Direction::Right,
             movement_state: MovementState::Air { jumped_again: true },
         }
+    }
+
+    pub fn new_character(pos: V2f, health: i32) -> Self {
+        // TODO: something about this hardcoding
+        let bottom_left_offset = v2!(-(0.75 * 0.5), -(0.5 - 0.001));
+        let size = v2!(0.75, (0.5 - 0.001) + (0.5 - 1.0 / 9.0));
+        Self::new_entity(pos, bottom_left_offset, size, health)
+    }
+
+    pub fn new_thing(pos: V2f, bottom_left_offset: V2f, size: V2f) -> Self {
+        Self::new_entity(pos, bottom_left_offset, size, 1)
     }
 
     pub fn rect(&self) -> Rect2 {
@@ -556,13 +595,6 @@ impl Entity {
             bottom_left,
             bottom_left + self.size,
         )
-    }
-
-    pub fn with_pos_health(pos: V2f, hp: i32) -> Self {
-        let mut entity = Self::new();
-        entity.pos = pos;
-        entity.health.hp = hp;
-        entity
     }
 
     pub fn draw(&self, screen: &Bitmap, bmp: &Bitmap, camera: V2f, tile_size: i32) {

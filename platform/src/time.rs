@@ -1,11 +1,13 @@
-use core::mem;
-use winapi::um::profileapi::{QueryPerformanceCounter, QueryPerformanceFrequency};
+use std::mem::MaybeUninit;
+use winapi::um::profileapi;
 
 lazy_static::lazy_static! {
-    static ref PERFORMANCE_FREQUENCY: i64 = unsafe {
-        let mut pf = mem::uninitialized();
-        QueryPerformanceFrequency(&mut pf);
-        *pf.QuadPart()
+    static ref PERFORMANCE_FREQUENCY: i64 = {
+        let mut pf = MaybeUninit::uninit();
+        unsafe {
+            profileapi::QueryPerformanceFrequency(pf.as_mut_ptr());
+            *pf.assume_init().QuadPart()
+        }
     };
 }
 
@@ -27,10 +29,10 @@ impl Counter {
     }
 
     fn count() -> i64 {
+        let mut performance_count = MaybeUninit::uninit();
         unsafe {
-            let mut performance_count = mem::uninitialized();
-            QueryPerformanceCounter(&mut performance_count);
-            *performance_count.QuadPart()
+            profileapi::QueryPerformanceCounter(performance_count.as_mut_ptr());
+            *performance_count.assume_init().QuadPart()
         }
     }
 }
