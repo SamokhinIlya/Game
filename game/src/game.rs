@@ -68,8 +68,8 @@ struct PlayerBmps {
 }
 
 pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
-    const SPRITE_FOLDER: &str = "data/sprites/size_64/";
-    let tile_size = 64;
+    const SPRITE_FOLDER: &str = "data/sprites/size_16/";
+    let tile_size = 16;
     let hook_bmp = Bitmap::load(format!("{}{}", SPRITE_FOLDER, "hook.png")).unwrap();
 
     let result = Box::new(GameData {
@@ -125,6 +125,7 @@ pub fn update_and_render(
     dt:            f32,
 ) {
     let mut window_bmp = Bitmap::from(window_buffer);
+    let mut draw_bmp = Bitmap::with_dimensions(window_bmp.width() / 4, window_bmp.height() / 4);
 
     #[allow(clippy::cast_ptr_alignment)]
     let data = unsafe {
@@ -149,24 +150,22 @@ pub fn update_and_render(
     }
 
     let info = match data.state {
-        GameState::Playing => playing(&mut window_bmp, input, data, dt),
-        GameState::LevelEditor => level_editor(&mut window_bmp, input, data, dt),
+        GameState::Playing => playing(&mut draw_bmp, input, data, dt),
+        GameState::LevelEditor => level_editor(&mut draw_bmp, input, data, dt),
     };
 
-    let mut str_buffer: [u8; 256] = unsafe {
-        std::mem::MaybeUninit::uninit().assume_init()
-    };
-    use std::io::Write;
-    write!(
-        &mut str_buffer[..],
-        "frame: {:>3.3} ms, {:>2.2} fps || {}\0",
-        dt,
-        dt.recip(),
-        info,
-    ).unwrap();
-    unsafe {
-        window.set_title(&str_buffer);
-    }
+    render::scale_up(&draw_bmp, &mut window_bmp, 4);
+
+    window.set_title(unsafe {
+        &std::ffi::CString::from_vec_unchecked(
+            format!(
+                "frame: {:>3.3} ms, {:>2.2} fps || {}\0",
+                dt * 1000.0,
+                dt.recip(),
+                info,
+            ).into()
+        )
+    });
 
     std::mem::forget(window_bmp);
 }
@@ -520,7 +519,7 @@ fn level_editor(
     }
 
     // draw yellow outline
-    render::draw_rect(screen, v2!(0), screen.dim(), Color::YELLOW, 5);
+    render::draw_rect(screen, v2!(0), screen.dim(), Color::YELLOW, 2);
 
     format!(" camera: {:?}", data.camera_pos)
 }

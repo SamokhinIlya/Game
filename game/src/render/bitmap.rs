@@ -1,5 +1,5 @@
 use std::{
-    mem::{self, size_of},
+    mem,
     ptr,
     ops::{Index, IndexMut},
     iter::Iterator,
@@ -20,9 +20,15 @@ pub struct Bitmap {
 
 impl Drop for Bitmap {
     fn drop(&mut self) {
-        let capacity = (self.width * self.height) as usize;
+        use std::alloc::{dealloc, Layout};
         unsafe {
-            mem::drop(Vec::from_raw_parts(self.data, capacity, capacity))
+            dealloc(
+                self.data as *mut u8,
+                Layout::from_size_align_unchecked(
+                    mem::size_of::<u32>() * self.width as usize * self.height as usize,
+                    mem::align_of::<u32>(),
+                )
+            );
         }
     }
 }
@@ -53,24 +59,35 @@ impl Bitmap {
     pub fn with_dimensions(width: i32, height: i32) -> Self {
         assert!(width > 0 && height > 0);
 
-        let data = {
-            let mut vec = Vec::<u32>::with_capacity(width as usize * height as usize);
-            let ptr = vec.as_mut_ptr();
-            mem::forget(vec);
-            ptr
+        use std::alloc::{alloc, Layout};
+
+        let data = unsafe {
+            alloc(Layout::from_size_align_unchecked(
+                mem::size_of::<u32>() * width as usize * height as usize,
+                mem::align_of::<u32>(),
+            )) as *mut u32
         };
 
         Self { data, width, height }
     }
 
-    pub fn filled(self, color: Color) -> Self {
-        let slice = unsafe {
-            slice::from_raw_parts_mut(self.data, (self.width * self.height) as usize)
-        };
-        for p in slice {
+    pub fn filled(mut self, color: Color) -> Self {
+        for p in self.as_mut_slice() {
             *p = color.into()
         }
         self
+    }
+
+    pub fn as_slice(&self) -> &[u32] {
+        unsafe {
+            slice::from_raw_parts(self.data, self.width as usize * self.height as usize)
+        }
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u32] {
+        unsafe {
+            slice::from_raw_parts_mut(self.data, self.width as usize * self.height as usize)
+        }
     }
 
     pub fn clamped_view(&self, mut top_left: V2i, mut bottom_right: V2i) -> BitmapView {
@@ -128,6 +145,7 @@ impl Bitmap {
             let data = png.buffer.as_mut_ptr() as *mut u32;
             let width = png.width as i32;
             let height = png.height as i32;
+            // FIXME: what will drop do
             mem::forget(png);
 
             Ok(Bitmap { data, width, height })
@@ -141,8 +159,9 @@ impl Bitmap {
             assert!(header.BITMAPFILEHEADER.bfType == unsafe { mem::transmute(*b"BM") });
 
             let bmp_data = {
+                //FIXME: alloc
                 let mut vec = Vec::<u32>::with_capacity(
-                    header.BITMAPV5HEADER.bV5SizeImage as usize / size_of::<u32>()
+                    header.BITMAPV5HEADER.bV5SizeImage as usize / mem::size_of::<u32>()
                 );
                 let ptr = vec.as_mut_ptr();
                 mem::forget(vec);
@@ -156,7 +175,7 @@ impl Bitmap {
             #[allow(clippy::cast_ptr_alignment)]
             let mut src_row: *mut u32 = unsafe {
                 let end_row_offset = header.BITMAPFILEHEADER.bfOffBits as usize
-                    + ((bmp_height - 1) * bmp_width) as usize * size_of::<u32>();
+                    + ((bmp_height - 1) * bmp_width) as usize * mem::size_of::<u32>();
                 file.as_ptr().add(end_row_offset) as *mut u32
             };
 
