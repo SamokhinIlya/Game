@@ -8,6 +8,24 @@ use crate::vector::prelude::*;
 pub use color::Color;
 pub use bitmap::Bitmap;
 
+pub fn scale_up(src: &Bitmap, dst: &mut Bitmap, scale: i32) {
+    assert!(scale > 0, "scale_up error. scale: {} > 0", scale);
+    assert!(src.width() * scale <= dst.width());
+    assert!(src.height() * scale <= dst.height());
+
+    for y in 0..src.height() {
+        for x in 0..src.width() {
+            let start_y = y * scale;
+            let start_x = x * scale;
+            for dst_y in start_y..(start_y + scale) {
+                for dst_x in start_x..(start_x + scale) {
+                    dst[(dst_x, dst_y)] = src[(x, y)];
+                }
+            }
+        }
+    }
+}
+
 pub fn fill_rect(dst_bmp: &Bitmap, mut min: V2i, mut max: V2i, color: Color) {
     if min.x > max.x {
         swap(&mut min.x, &mut max.x)
@@ -23,9 +41,13 @@ pub fn fill_rect(dst_bmp: &Bitmap, mut min: V2i, mut max: V2i, color: Color) {
     }
 }
 
-///FIXME: if left or top edge is in bounds,
-///       but same edge + thickness is out of bounds,
-///       function panics
+/// FIXME:
+///
+/// if left or top edge is in bounds,
+///
+/// but same edge + thickness is out of bounds,
+///
+/// function panics
 pub fn draw_rect(
     dst: &mut Bitmap,
     mut min: V2i,

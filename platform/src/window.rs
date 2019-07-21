@@ -5,7 +5,7 @@ use std::{
 use winapi::{
     shared::{
         windef::{HWND, HDC},
-        ntdef::{LONG, LPCSTR},
+        ntdef::LONG,
         minwindef,
     },
     um::{
@@ -257,8 +257,8 @@ impl Window {
         }
     }
 
-    pub unsafe fn set_title(&self, str_buffer: &[u8]) {
-        winuser::SetWindowTextA(self.handle, str_buffer.as_ptr() as LPCSTR);
+    pub fn set_title(&self, s: &std::ffi::CStr) {
+        unsafe { winuser::SetWindowTextA(self.handle, s.as_ptr() as _); }
     }
 
     unsafe extern "system" fn window_class_proc(
