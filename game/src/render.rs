@@ -3,7 +3,7 @@ pub mod color;
 pub mod bitmap;
 
 use std::mem::swap;
-use crate::vector::prelude::*;
+use crate::linear_algebra::vector::prelude::*;
 
 pub use color::Color;
 pub use bitmap::Bitmap;
@@ -215,5 +215,5 @@ pub fn draw_bmp(dst: &Bitmap, src: &Bitmap, p: V2i) {
 }
 
 pub fn clear(dst: &Bitmap, color: Color) {
-    fill_rect(dst, v2!(0, 0), dst.dim(), color);
+    fill_rect(dst, (0, 0).into(), dst.dim(), color);
 }

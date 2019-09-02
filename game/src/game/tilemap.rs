@@ -1,10 +1,11 @@
 use std::ops::{Index, IndexMut};
 use crate::{
     render::{self, Bitmap},
-    vector::prelude::*,
+    linear_algebra::vector::prelude::*,
     file::prelude::*,
 };
 
+// FIXME: one pixel gap between objects less than one pixel away from each other
 pub fn screen_pos_to_tilemap_pos(
     screen_pos: V2i,
     camera: V2f,
@@ -13,7 +14,7 @@ pub fn screen_pos_to_tilemap_pos(
 ) -> V2f {
     let x = screen_pos.x as f32 / tile_size as f32 + camera.x;
     let y = (screen.y - screen_pos.y) as f32 / tile_size as f32 + camera.y;
-    v2!(x, y)
+    (x, y).into()
 }
 
 pub fn tilemap_pos_to_screen_pos(
@@ -24,7 +25,7 @@ pub fn tilemap_pos_to_screen_pos(
 ) -> V2i {
     let x = ((tilemap_pos.x - camera.x) * tile_size as f32) as i32;
     let y = screen.y - ((tilemap_pos.y - camera.y) * tile_size as f32) as i32;
-    v2!(x, y)
+    (x, y).into()
 }
 
 // TileInfo
@@ -103,7 +104,7 @@ impl Tilemap {
 
     pub fn width(&self) -> i32 { self.width }
     pub fn height(&self) -> i32 { self.height }
-    pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
+    pub fn dim(&self) -> V2i { (self.width, self.height).into() }
 
     fn check(&self, x: i32, y: i32) {
         assert!(
@@ -186,25 +187,25 @@ impl Tilemap {
                 if !tile.is_visible() { continue }
 
                 let V2 { x, y } = tilemap_pos_to_screen_pos(
-                    v2!(tile_x, tile_y).into(),
+                    (tile_x as f32, tile_y as f32).into(),
                     camera,
                     dst.dim(),
                     info.size,
                 );
-                render::draw_bmp(dst, info.get_bmp(tile), v2!(x, y - info.size));
+                render::draw_bmp(dst, info.get_bmp(tile), (x, y - info.size).into());
             }
         }
     }
 
     pub fn draw_outline(&self, dst: &mut Bitmap, camera: V2f, info: &TileInfo) {
         let min: V2i = tilemap_pos_to_screen_pos(
-            v2!(0.0, self.height as f32),
+            (0.0, self.height as f32).into(),
             camera,
             dst.dim(),
             info.size,
         );
         let max: V2i = tilemap_pos_to_screen_pos(
-            v2!(self.width as f32, 0.0),
+            (self.width as f32, 0.0).into(),
             camera,
             dst.dim(),
             info.size,
@@ -228,7 +229,7 @@ impl Tilemap {
 
         for tile_y in lower_bound..upper_bound {
             let mut min = tilemap_pos_to_screen_pos(
-                v2!(0, tile_y).into(),
+                (0., tile_y as f32).into(),
                 camera,
                 dst.dim(),
                 info.size,
@@ -239,7 +240,7 @@ impl Tilemap {
             min.x = clamp(min.x, 0, dst.width());
 
             let mut max = tilemap_pos_to_screen_pos(
-                v2!(self.width, tile_y).into(),
+                (self.width as f32, tile_y as f32).into(),
                 camera,
                 dst.dim(),
                 info.size,
@@ -254,7 +255,7 @@ impl Tilemap {
 
         for tile_x in left_bound..right_bound {
             let mut min = tilemap_pos_to_screen_pos(
-                v2!(tile_x, self.height).into(),
+                (tile_x as f32, self.height as f32).into(),
                 camera,
                 dst.dim(),
                 info.size,
@@ -265,7 +266,7 @@ impl Tilemap {
             min.y = clamp(min.y, 0, dst.height());
 
             let mut max = tilemap_pos_to_screen_pos(
-                v2!(tile_x, 0).into(),
+                (tile_x as f32, 0.).into(),
                 camera,
                 dst.dim(),
                 info.size,

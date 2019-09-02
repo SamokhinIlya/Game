@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     path::Path,
 };
-use crate::vector::prelude::*;
+use crate::linear_algebra::vector::prelude::*;
 use super::{
     Bitmap,
     Color,
@@ -19,7 +19,7 @@ impl FontBitmaps {
     pub fn height(&self) -> i32 { self.height }
 
     pub fn width(&self, s: &str) -> i32 {
-        self.to_bitmaps(s).map(|bmp| bmp.width()).sum()
+        self.to_bitmaps(s).map(Bitmap::width).sum()
     }
 
     /// Draws string of text to the dst `Bitmap`
@@ -28,7 +28,7 @@ impl FontBitmaps {
     pub fn draw_string(&self, dst: &Bitmap, V2i { x, y }: V2i, s: &str) -> i32 {
         let mut current_x = x;
         for bmp in self.to_bitmaps(s) {
-            draw_bmp(dst, bmp, v2!(current_x, y));
+            draw_bmp(dst, bmp, (current_x, y).into());
             current_x += bmp.width();
         }
         current_x - x
@@ -45,6 +45,9 @@ impl FontBitmaps {
 
     pub fn new(filepath: impl AsRef<Path>, height: i32) -> std::io::Result<Self> {
         use rusttype::{point, FontCollection, PositionedGlyph, Scale};
+
+        const ALL_SYMBOLS: &str =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.,:;!?";
 
         let font = {
             let file = crate::file::read_entire_file(filepath)?;
@@ -64,8 +67,6 @@ impl FontBitmaps {
         let v_metrics = font.v_metrics(scale);
         let offset = point(0.0, v_metrics.ascent);
 
-        const ALL_SYMBOLS: &str =
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.,:;!?";
         let glyphs: Vec<PositionedGlyph> = font.layout(ALL_SYMBOLS, scale, offset).collect();
 
         let mut char_bitmaps = HashMap::new();

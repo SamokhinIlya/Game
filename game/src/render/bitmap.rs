@@ -7,7 +7,7 @@ use std::{
 };
 use crate::{
     file::{prelude::*, read_entire_file},
-    vector::prelude::*,
+    linear_algebra::vector::prelude::*,
     render::Color,
 };
 
@@ -54,12 +54,12 @@ impl IndexMut<(i32, i32)> for Bitmap {
 impl Bitmap {
     pub fn width(&self) -> i32 { self.width }
     pub fn height(&self) -> i32 { self.height }
-    pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
+    pub fn dim(&self) -> V2i { (self.width, self.height).into() }
 
     pub fn with_dimensions(width: i32, height: i32) -> Self {
-        assert!(width > 0 && height > 0);
-
         use std::alloc::{alloc, Layout};
+
+        assert!(width > 0 && height > 0);
 
         let data = unsafe {
             alloc(Layout::from_size_align_unchecked(
