@@ -12,13 +12,12 @@ impl WindowBuffer {
         use std::alloc::{alloc, Layout};
         use std::mem::{size_of, align_of};
 
+        #[allow(clippy::cast_ptr_alignment)]
         let data = unsafe {
-            alloc(
-                Layout::from_size_align_unchecked(
-                    width as usize * height as usize * size_of::<u32>(),
-                    align_of::<u32>(),
-                )
-            ) as *mut u32
+            alloc(Layout::from_size_align_unchecked(
+                width as usize * height as usize * size_of::<u32>(),
+                align_of::<u32>(),
+            )) as *mut u32
         };
 
         Self { data, width, height }

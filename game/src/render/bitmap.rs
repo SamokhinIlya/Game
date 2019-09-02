@@ -7,7 +7,7 @@ use std::{
 };
 use crate::{
     file::{prelude::*, read_entire_file},
-    linear_algebra::vector::prelude::*,
+    geom::vector::prelude::*,
     render::Color,
 };
 
@@ -61,6 +61,7 @@ impl Bitmap {
 
         assert!(width > 0 && height > 0);
 
+        #[allow(clippy::cast_ptr_alignment)]
         let data = unsafe {
             alloc(Layout::from_size_align_unchecked(
                 mem::size_of::<u32>() * width as usize * height as usize,

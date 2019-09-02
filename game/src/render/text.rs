@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     path::Path,
 };
-use crate::linear_algebra::vector::prelude::*;
+use crate::geom::vector::prelude::*;
 use super::{
     Bitmap,
     Color,

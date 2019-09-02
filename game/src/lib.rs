@@ -8,7 +8,7 @@
 mod game;
 mod render;
 mod file;
-mod linear_algebra;
+mod geom;
 
 pub use game::{
     startup,
