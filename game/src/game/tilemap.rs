@@ -1,9 +1,8 @@
 use std::ops::{Index, IndexMut};
 use crate::{
-    render::{self, Bitmap, screen_info::ScreenInfo},
+    render::{self, Bitmap, canvas_info::CanvasInfo},
     geom::{
         vector::prelude::*,
-        matrix::Mat2,
         aabb::AABB,
     },
     file::prelude::*,
@@ -147,10 +146,10 @@ impl Tilemap {
         }
     }
 
-    pub fn draw(&self, dst: &Bitmap, screen_info: &ScreenInfo, tile_info: &TileInfo) {
+    pub fn draw(&self, canvas: &Bitmap, canvas_info: &CanvasInfo, tile_info: &TileInfo) {
         use std::cmp::{min, max};
 
-        let camera_i: V2i = screen_info.camera.floor().into();
+        let camera_i: V2i = canvas_info.camera.floor().into();
         let v_draw_tiles = tile_info.screen_height.ceil() as i32;
         let h_draw_tiles = tile_info.screen_width.ceil() as i32;
 
@@ -167,28 +166,28 @@ impl Tilemap {
                     continue
                 }
 
-                let V2 { x, y } = render::v2_to_screen((tile_x as f32, tile_y as f32).into(), screen_info);
-                render::draw_bmp(dst, tile_info.get_bmp(tile), (x, y - tile_info.size).into());
+                let V2 { x, y } = render::v2_to_screen((tile_x as f32, tile_y as f32).into(), canvas_info);
+                render::draw_bmp(canvas, tile_info.get_bmp(tile), (x, y - tile_info.size).into());
             }
         }
     }
 
-    pub fn draw_outline(&self, dst: &mut Bitmap, screen_info: &ScreenInfo) {
+    pub fn draw_outline(&self, canvas: &mut Bitmap, canvas_info: &CanvasInfo) {
         let AABB { min, max } = render::aabb_to_screen(
             AABB { min: (0.0, 0.0).into(), max: (self.width as f32, self.height as f32).into() },
-            screen_info,
+            canvas_info,
         );
-        render::draw_rect(dst, min, max, render::Color::YELLOW, 1);
+        render::draw_rect(canvas, min, max, render::Color::YELLOW, 1);
     }
 
-    pub fn draw_grid(&self, dst: &mut Bitmap, screen_info: &ScreenInfo, tile_info: &TileInfo) {
+    pub fn draw_grid(&self, canvas: &mut Bitmap, canvas_info: &CanvasInfo, tile_info: &TileInfo) {
         use std::cmp::{min, max};
         use utils::clamp;
 
         let color = render::Color::GREY;
         let thickness = 1;
 
-        let camera_i: V2i = screen_info.camera.floor().into();
+        let camera_i: V2i = canvas_info.camera.floor().into();
         let v_draw_tiles = tile_info.screen_height.ceil() as i32;
         let h_draw_tiles = tile_info.screen_width.ceil() as i32;
 
@@ -196,32 +195,32 @@ impl Tilemap {
         let upper_bound = min(camera_i.y + v_draw_tiles + 1, self.height);
 
         for tile_y in lower_bound..upper_bound {
-            let mut min = render::v2_to_screen((0., tile_y as f32).into(), screen_info);
-            if !(0..dst.height()).contains(&min.y) {
+            let mut min = render::v2_to_screen((0., tile_y as f32).into(), canvas_info);
+            if !(0..canvas.height()).contains(&min.y) {
                 continue;
             }
-            min.x = clamp(min.x, 0, dst.width());
+            min.x = clamp(min.x, 0, canvas.width());
 
-            let mut max = render::v2_to_screen((self.width as f32, tile_y as f32).into(), screen_info);
-            max.x = clamp(max.x, 0, dst.width());
+            let mut max = render::v2_to_screen((self.width as f32, tile_y as f32).into(), canvas_info);
+            max.x = clamp(max.x, 0, canvas.width());
 
-            render::draw_line(dst, min, max, color, thickness);
+            render::draw_line(canvas, min, max, color, thickness);
         }
 
         let left_bound = max(camera_i.x, 1);
         let right_bound = min(camera_i.x + h_draw_tiles + 1, self.width);
 
         for tile_x in left_bound..right_bound {
-            let mut min = render::v2_to_screen((tile_x as f32, self.height as f32).into(), screen_info);
-            if !(0..dst.width()).contains(&min.x) {
+            let mut min = render::v2_to_screen((tile_x as f32, self.height as f32).into(), canvas_info);
+            if !(0..canvas.width()).contains(&min.x) {
                 continue;
             }
-            min.y = clamp(min.y, 0, dst.height());
+            min.y = clamp(min.y, 0, canvas.height());
 
-            let mut max = render::v2_to_screen((tile_x as f32, 0.).into(), screen_info);
-            max.y = clamp(max.y, 0, dst.height());
+            let mut max = render::v2_to_screen((tile_x as f32, 0.).into(), canvas_info);
+            max.y = clamp(max.y, 0, canvas.height());
 
-            render::draw_line(dst, min, max, color, thickness);
+            render::draw_line(canvas, min, max, color, thickness);
         }
     }
 }

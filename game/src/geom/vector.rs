@@ -2,6 +2,7 @@ use core::ops::{
     Add, AddAssign,
     Sub, SubAssign,
     Mul,
+    Div,
     Neg,
 };
 pub use super::num::Num32;
@@ -59,13 +60,19 @@ impl V2<f32> {
 
 impl From<V2i> for V2f {
     fn from(v: V2i) -> Self {
-        Self { x: v.x as f32, y: v.y as f32 }
+        Self {
+            x: v.x as f32,
+            y: v.y as f32
+        }
     }
 }
 
 impl From<V2f> for V2i {
     fn from(v: V2f) -> Self {
-        Self { x: v.x as i32, y: v.y as i32 }
+        Self {
+            x: v.x as i32,
+            y: v.y as i32,
+        }
     }
 }
 
@@ -84,7 +91,10 @@ impl<T: Num32> Into<(T, T)> for V2<T> {
 impl<T: Num32> Add for V2<T> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        Self { x: self.x + rhs.x, y: self.y + rhs.y }
+        Self::Output {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
     }
 }
 
@@ -97,7 +107,10 @@ impl<T: Num32> AddAssign for V2<T> {
 impl<T: Num32> Sub for V2<T> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        Self { x: self.x - rhs.x, y: self.y - rhs.y }
+        Self::Output {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
     }
 }
 
@@ -110,28 +123,30 @@ impl<T: Num32> SubAssign for V2<T> {
 impl<T: Num32> Mul<T> for V2<T> {
     type Output = Self;
     fn mul(self, rhs: T) -> Self::Output {
-        Self { x: self.x * rhs, y: self.y * rhs }
+        Self::Output {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
     }
 }
 
-impl Mul<V2<i32>> for i32 {
-    type Output = V2<i32>;
-    fn mul(self, rhs: Self::Output) -> Self::Output {
-        Self::Output { x: self * rhs.x, y: self * rhs.y }
-    }
-}
-
-impl Mul<V2<f32>> for f32 {
-    type Output = V2<f32>;
-    fn mul(self, rhs: Self::Output) -> Self::Output {
-        Self::Output { x: self * rhs.x, y: self * rhs.y }
+impl<T: Num32> Div<T> for V2<T> {
+    type Output = Self;
+    fn div(self, rhs: T) -> Self::Output {
+        Self::Output {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
     }
 }
 
 impl<T: Num32> Neg for V2<T> {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        Self { x: -self.x, y: -self.y }
+        Self::Output {
+            x: -self.x,
+            y: -self.y,
+        }
     }
 }
 

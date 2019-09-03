@@ -1,14 +1,13 @@
 mod tilemap;
 
 use platform::input::{Input, KBKey, MouseKey};
-use utils::*;
 use crate::{
     render::{
         self,
         Color,
         Bitmap,
         text::FontBitmaps,
-        screen_info::ScreenInfo,
+        canvas_info::CanvasInfo,
     },
     geom::{
         vector::{
@@ -25,10 +24,6 @@ use tilemap::{
     Tile,
     TileInfo,
 };
-
-/* TODO: in progress
-  - level editor with screen_scale != 1
-*/
 
 /* TODO: next
     - game:
@@ -63,7 +58,7 @@ enum GameState {
 }
 
 struct GameData {
-    pub screen_info: ScreenInfo,
+    pub canvas_info: CanvasInfo,
 
     pub state: GameState,
 
@@ -96,16 +91,22 @@ fn restart(data: &mut GameData) {
     data.player = Entity::new_character((2.5, 2.5).into(), 1);
 }
 
+const FONT: &str = "data/fonts/FiraCode-Bold.ttf";
+const FONT_SIZE: i32 = 36;
+
 pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
     const SPRITE_FOLDER: &str = "data/sprites/size_16/";
+
     let tile_size = 16;
+    let screen_scale = 4;
     let hook_bmp = Bitmap::load(format!("{}{}", SPRITE_FOLDER, "hook.png")).unwrap();
 
     let mut result = Box::new(GameData {
-        screen_info: ScreenInfo {
+        canvas_info: CanvasInfo {
+            // FIXME: duplicate
             width: i32::default(),
             height: i32::default(),
-            scale: 4,
+            scale: screen_scale,
             game_to_screen_matrix: Mat2::<f32>::from([
                 [tile_size as f32,  0.0             ],
                 [0.0             , -tile_size as f32],
@@ -150,7 +151,7 @@ pub fn startup(_screen_width: i32, _screen_height: i32) -> *mut () {
         },
         enemy_bmp_right: Bitmap::load(format!("{}{}", SPRITE_FOLDER, "test_enemy_right.png")).unwrap(),
         enemy_bmp_left: Bitmap::load(format!("{}{}", SPRITE_FOLDER, "test_enemy_left.png")).unwrap(),
-        font_bmp: render::text::FontBitmaps::new("data/fonts/Inconsolata-Regular.ttf", 20).unwrap(),
+        font_bmp: render::text::FontBitmaps::new(FONT, FONT_SIZE / screen_scale).unwrap(),
         text: String::new(),
         text_timer: 0.0,
     });
@@ -178,30 +179,32 @@ pub fn update_and_render(
         window.toggle_fullscreen();
     }
     if input.keyboard[KBKey::F12].pressed() {
-        data.screen_info.scale = if data.screen_info.scale == 1 { 4 } else { 1 };
+        data.canvas_info.scale = if data.canvas_info.scale == 1 { 4 } else { 1 };
+        data.font_bmp = render::text::FontBitmaps::new(FONT, FONT_SIZE / data.canvas_info.scale)
+            .unwrap();
     }
 
     let mut window_bmp = Bitmap::from(window_buffer);
     // FIXME: alloc dealloc every frame
-    let mut draw_bmp = Bitmap::with_dimensions(window_bmp.width() / data.screen_info.scale, window_bmp.height() / data.screen_info.scale);
+    let mut canvas = Bitmap::with_dimensions(window_bmp.width() / data.canvas_info.scale, window_bmp.height() / data.canvas_info.scale);
 
-    if data.screen_info.width != draw_bmp.width() {
-        data.screen_info.width = draw_bmp.width();
+    if data.canvas_info.width != canvas.width() {
+        data.canvas_info.width = canvas.width();
         data.tile_info.screen_width =
-            data.screen_info.width as f32 / data.tile_info.size as f32;
+            data.canvas_info.width as f32 / data.tile_info.size as f32;
     }
-    if data.screen_info.height != draw_bmp.height() {
-        data.screen_info.height = draw_bmp.height();
+    if data.canvas_info.height != canvas.height() {
+        data.canvas_info.height = canvas.height();
         data.tile_info.screen_height =
-            data.screen_info.height as f32 / data.tile_info.size as f32;
+            data.canvas_info.height as f32 / data.tile_info.size as f32;
     }
 
     let info = match data.state {
-        GameState::Playing => playing(&mut draw_bmp, input, data, dt),
-        GameState::LevelEditor => level_editor(&mut draw_bmp, input, data, dt),
+        GameState::Playing => playing(&mut canvas, input, data, dt),
+        GameState::LevelEditor => level_editor(&mut canvas, input, data, dt),
     };
 
-    render::scale_up(&draw_bmp, &mut window_bmp, data.screen_info.scale);
+    render::scale_up(&canvas, &mut window_bmp, data.canvas_info.scale);
 
     window.set_title(unsafe {
         &std::ffi::CString::from_vec_unchecked(
@@ -219,7 +222,7 @@ pub fn update_and_render(
 
 #[allow(clippy::useless_format)]
 fn playing(
-    screen: &mut Bitmap,
+    canvas: &mut Bitmap,
     input:  &Input,
     data:   &mut GameData,
     dt:     f32,
@@ -228,7 +231,7 @@ fn playing(
 
     if input.keyboard[K].pressed() && input.keyboard[Ctrl].is_down() {
         data.state = GameState::LevelEditor;
-        render::clear(screen, Color::BLACK);
+        render::clear(canvas, Color::BLACK);
     }
     if input.keyboard[Escape].pressed() {
         restart(data);
@@ -338,64 +341,64 @@ fn playing(
         let screen_center = V2f::new(data.tile_info.screen_width, data.tile_info.screen_height) * 0.5;
 
         // camera origin is bottom left corner of a screen
-        data.screen_info.camera = data.player.pos - screen_center;
-        data.screen_info.camera.x = clamp(
-            data.screen_info.camera.x,
+        data.canvas_info.camera = data.player.pos - screen_center;
+        data.canvas_info.camera.x = utils::clamp(
+            data.canvas_info.camera.x,
             0.0,
             data.tilemap.width() as f32 - data.tile_info.screen_width,
         );
-        data.screen_info.camera.y = clamp(
-            data.screen_info.camera.y,
+        data.canvas_info.camera.y = utils::clamp(
+            data.canvas_info.camera.y,
             0.0,
             data.tilemap.height() as f32 - data.tile_info.screen_height,
         );
     }
 
     // draw ////////////////////////////////////////////////////////
-    render::clear(screen, Color::BLACK);
+    render::clear(canvas, Color::BLACK);
 
-    data.tilemap.draw(screen, &data.screen_info, &data.tile_info);
+    data.tilemap.draw(canvas, &data.canvas_info, &data.tile_info);
 
     let player_bmp = match data.player.facing  {
         Direction::Right => &data.player_bmps.right,
         Direction::Left => &data.player_bmps.left,
     };
 
-    let player_up_left = render::v2_to_screen(data.player.pos, &data.screen_info) - V2::diag(data.tile_info.size / 2);
-    render::draw_bmp(screen, player_bmp, player_up_left);
+    let player_up_left = render::v2_to_screen(data.player.pos, &data.canvas_info) - V2::diag(data.tile_info.size / 2);
+    render::draw_bmp(canvas, player_bmp, player_up_left);
 
-    let player_collision_rect = render::aabb_to_screen(data.player.collision_aabb(), &data.screen_info);
-    render::draw_rect(screen, player_collision_rect.min, player_collision_rect.max, Color::YELLOW, 1);
+    let player_collision_rect = render::aabb_to_screen(data.player.collision_aabb(), &data.canvas_info);
+    render::draw_rect(canvas, player_collision_rect.min, player_collision_rect.max, Color::YELLOW, 1);
 
     // attack collision box
     if let Some((attack_aabb, _)) = attack_aabb {
-        let AABB { min, max } = render::aabb_to_screen(attack_aabb, &data.screen_info);
-        render::fill_rect(screen, min, max, { let mut c = Color::RED; c.a = 0x77; c });
+        let AABB { min, max } = render::aabb_to_screen(attack_aabb, &data.canvas_info);
+        render::fill_rect(canvas, min, max, { let mut c = Color::RED; c.a = 0x77; c });
     }
 
     if let Some((_, attack_offset)) = attack_aabb {
         let bmp = &data.player_bmps.hook;
         let attack_pos = data.player.collision_aabb().top_left() + attack_offset;
-        let attack_screen_pos = render::v2_to_screen(attack_pos, &data.screen_info);
-        render::draw_bmp(screen, bmp, attack_screen_pos);
+        let attack_screen_pos = render::v2_to_screen(attack_pos, &data.canvas_info);
+        render::draw_bmp(canvas, bmp, attack_screen_pos);
     }
 
     for enemy in &data.enemies {
         match enemy.health.knockback {
             Knockback::Knocked { time_remaining, .. } if (time_remaining * 20.0).sin() > 0.0 => (),
             _ => {
-                let pos = render::v2_to_screen(enemy.pos, &data.screen_info);
+                let pos = render::v2_to_screen(enemy.pos, &data.canvas_info);
                 let bmp = match enemy.facing {
                     Direction::Right => &data.enemy_bmp_right,
                     Direction::Left => &data.enemy_bmp_left,
                 };
-                render::draw_bmp(screen, bmp, pos - V2::diag(data.tile_info.size / 2));
+                render::draw_bmp(canvas, bmp, pos - V2::diag(data.tile_info.size / 2));
             },
         }
 
         // enemy collision box
-        let AABB { min, max } = render::aabb_to_screen(enemy.collision_aabb(), &data.screen_info);
-        render::draw_rect(screen, min, max, Color::YELLOW, 1);
+        let AABB { min, max } = render::aabb_to_screen(enemy.collision_aabb(), &data.canvas_info);
+        render::draw_rect(canvas, min, max, Color::YELLOW, 1);
     }
 
     format!(" {}", data.player.pos.x + data.player.origin_to_bottom_left.x)
@@ -403,7 +406,7 @@ fn playing(
 
 #[allow(clippy::useless_format)]
 fn level_editor(
-    screen: &mut Bitmap,
+    canvas: &mut Bitmap,
     input:  &Input,
     data:   &mut GameData,
     dt:     f32,
@@ -421,12 +424,6 @@ fn level_editor(
         } else {
             "Saved".into()
         };
-    }
-
-    if data.text_timer > 0.0 {
-        data.text_timer -= dt;
-        //FIXME: doesnt work
-        data.font_bmp.draw_string(screen, (10, 10).into(), &data.text);
     }
 
     let mut new_tilemap_size = data.tilemap.dim();
@@ -450,23 +447,26 @@ fn level_editor(
     if !input.keyboard[KBKey::Ctrl].is_down() {
         const CAMERA_SPEED: f32 = 10.0;
         match (input.keyboard[KBKey::A].is_down(), input.keyboard[KBKey::D].is_down()) {
-            (false, true ) => data.screen_info.camera.x += CAMERA_SPEED * dt,
-            (true , false) => data.screen_info.camera.x -= CAMERA_SPEED * dt,
+            (false, true ) => data.canvas_info.camera.x += CAMERA_SPEED * dt,
+            (true , false) => data.canvas_info.camera.x -= CAMERA_SPEED * dt,
             _ => (),
         }
         match (input.keyboard[KBKey::S].is_down(), input.keyboard[KBKey::W].is_down()) {
-            (false, true ) => data.screen_info.camera.y += CAMERA_SPEED * dt,
-            (true , false) => data.screen_info.camera.y -= CAMERA_SPEED * dt,
+            (false, true ) => data.canvas_info.camera.y += CAMERA_SPEED * dt,
+            (true , false) => data.canvas_info.camera.y -= CAMERA_SPEED * dt,
             _ => (),
         }
     }
 
-    let mouse_screen = V2i::from(input.mouse.pos());
-    let mouse_pos = V2f::from(mouse_screen) - V2f::new(0.0, data.screen_info.height as f32);
-    let mouse = V2i::from(&data.screen_info.screen_to_game_matrix * mouse_pos + data.screen_info.camera);
+    let mouse_screen = V2i::from(input.mouse.pos()) / data.canvas_info.scale;
+    let mouse = {
+        // moving origin from top left to bottom left
+        let mouse_pos = V2f::from(mouse_screen) - V2f::new(0.0, data.canvas_info.height as f32);
+        V2i::from(&data.canvas_info.screen_to_game_matrix * mouse_pos + data.canvas_info.camera)
+    };
 
-    let mouse_pos_textbox: Option<(String, V2i)> = if (0..screen.width()).contains(&mouse_screen.x)
-        && (0..screen.height()).contains(&mouse_screen.y)
+    let mouse_pos_textbox: Option<(String, V2i)> = if (0..canvas.width()).contains(&mouse_screen.x)
+        && (0..canvas.height()).contains(&mouse_screen.y)
     {
         let margin = (10, 10).into();
         let mut text_pos = mouse_screen + margin;
@@ -476,10 +476,10 @@ fn level_editor(
         let height = data.font_bmp.height();
 
         // move textbox, so that it doesn't intersect edges of a screen
-        if text_pos.x + width > screen.width() {
+        if text_pos.x + width > canvas.width() {
             text_pos.x = mouse_screen.x - width - margin.x;
         }
-        if text_pos.y + height > screen.height() {
+        if text_pos.y + height > canvas.height() {
             text_pos.y = mouse_screen.y - height - margin.y;
         }
 
@@ -504,55 +504,63 @@ fn level_editor(
         }
     }
 
-    render::clear(screen, Color::BLACK);
+    render::clear(canvas, Color::BLACK);
 
-    data.tilemap.draw(screen, &data.screen_info, &data.tile_info);
-    data.tilemap.draw_grid(screen, &data.screen_info, &data.tile_info);
+    data.tilemap.draw(canvas, &data.canvas_info, &data.tile_info);
+    data.tilemap.draw_grid(canvas, &data.canvas_info, &data.tile_info);
     //FIXME: horizontal line upper pixel is not drawn
-    data.tilemap.draw_outline(screen, &data.screen_info);
+    data.tilemap.draw_outline(canvas, &data.canvas_info);
 
     fn draw_text_box(
         dst: &mut Bitmap,
         font: &FontBitmaps,
         text: &str,
-        p: V2i
+        p: V2i,
+        scale: i32,
     ) -> V2i {
-        const MARGIN: V2i = V2i { x: 5, y: 5 };
+        let margin = V2i::new(8, 8) / scale;
 
         //TODO: get_bbox method?
         let min_text_box = p;
         let max_text_box = min_text_box
             + (font.width(text), font.height()).into()
-            + MARGIN * 2;
+            + margin * 2;
         render::fill_rect(dst, min_text_box, max_text_box, Color::BLACK);
         render::draw_rect(dst, min_text_box, max_text_box, Color::WHITE, 1);
-        font.draw_string(dst, min_text_box + MARGIN, text);
+        font.draw_string(dst, min_text_box + margin, text);
 
         max_text_box
     }
 
     let bottom_left = draw_text_box(
-        screen,
+        canvas,
         &data.font_bmp,
         &format!("{}x{}", data.tilemap.width(), data.tilemap.height()),
-        (50, 50).into(),
+        (50 / data.canvas_info.scale, 50 / data.canvas_info.scale).into(),
+        data.canvas_info.scale,
     );
 
     let _ = draw_text_box(
-        screen,
+        canvas,
         &data.font_bmp,
         "Use arrow keys to change tilemap size.",
-        (50, bottom_left.y).into(),
+        (50 / data.canvas_info.scale, bottom_left.y).into(),
+        data.canvas_info.scale,
     );
 
     if let Some((text, pos)) = mouse_pos_textbox {
-        draw_text_box(screen, &data.font_bmp, &text, pos);
+        draw_text_box(canvas, &data.font_bmp, &text, pos, data.canvas_info.scale);
+    }
+
+    if data.text_timer > 0.0 {
+        data.text_timer -= dt;
+        data.font_bmp.draw_string(canvas, V2::diag(8 / data.canvas_info.scale), &data.text);
     }
 
     // draw yellow outline
-    render::draw_rect(screen, (0, 0).into(), screen.dim(), Color::YELLOW, 2);
+    render::draw_rect(canvas, (0, 0).into(), canvas.dim(), Color::YELLOW, 2);
 
-    format!(" text: {}", data.text_timer)
+    format!(" mouse: {:?}", mouse)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -724,7 +732,7 @@ impl Entity {
         }
 
         // x update
-        self.vel.x = clamp(new_vel_x, -MAX_VEL_X, MAX_VEL_X);
+        self.vel.x = utils::clamp(new_vel_x, -MAX_VEL_X, MAX_VEL_X);
         self.pos.x = new_pos_x;
 
 
@@ -763,7 +771,7 @@ impl Entity {
         }
 
         // y update
-        self.vel.y = clamp(new_vel_y, -MAX_VEL_Y, MAX_VEL_Y);
+        self.vel.y = utils::clamp(new_vel_y, -MAX_VEL_Y, MAX_VEL_Y);
         self.pos.y = new_pos_y;
 
         // ground check //////////

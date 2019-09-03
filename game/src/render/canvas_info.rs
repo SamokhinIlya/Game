@@ -3,7 +3,7 @@ use crate::geom::{
     vector::prelude::*,
 };
 
-pub struct ScreenInfo {
+pub struct CanvasInfo {
     pub width: i32,
     pub height: i32,
 

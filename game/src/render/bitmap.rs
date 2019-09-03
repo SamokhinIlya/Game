@@ -57,12 +57,11 @@ impl Bitmap {
     pub fn dim(&self) -> V2i { (self.width, self.height).into() }
 
     pub fn with_dimensions(width: i32, height: i32) -> Self {
-        use std::alloc::{alloc, Layout};
-
         assert!(width > 0 && height > 0);
 
         #[allow(clippy::cast_ptr_alignment)]
         let data = unsafe {
+            use std::alloc::{alloc, Layout};
             alloc(Layout::from_size_align_unchecked(
                 mem::size_of::<u32>() * width as usize * height as usize,
                 mem::align_of::<u32>(),
@@ -120,6 +119,7 @@ impl Bitmap {
         self.data.add(y * self.width as usize + x)
     }
 
+    #[allow(clippy::items_after_statements)]
     pub fn load(filepath: impl AsRef<Path>) -> Result {
         let file_extension = filepath.as_ref().extension()
             .ok_or(BitmapLoadError::NoFileExtension)?;
@@ -143,10 +143,11 @@ impl Bitmap {
                 };
             }
 
+            // FIXME: what will drop do
+            #[allow(clippy::cast_ptr_alignment)]
             let data = png.buffer.as_mut_ptr() as *mut u32;
             let width = png.width as i32;
             let height = png.height as i32;
-            // FIXME: what will drop do
             mem::forget(png);
 
             Ok(Bitmap { data, width, height })

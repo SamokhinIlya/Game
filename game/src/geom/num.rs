@@ -4,6 +4,7 @@ pub use core::{
         Add, AddAssign,
         Sub, SubAssign,
         Mul, MulAssign,
+        Div, DivAssign,
         Neg,
     },
 };
@@ -16,6 +17,7 @@ pub trait Num32:
     + Add<Output = Self> + AddAssign
     + Sub<Output = Self> + SubAssign
     + Mul<Output = Self> + MulAssign
+    + Div<Output = Self> + DivAssign
     + Neg<Output = Self>
 {}
 

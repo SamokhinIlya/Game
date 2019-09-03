@@ -22,9 +22,9 @@ impl Color {
 
         Self {
             a: 0xFF,
-            r: (r * 255.0).round() as u8,
-            g: (g * 255.0).round() as u8,
-            b: (b * 255.0).round() as u8,
+            r: (r * 255.0).ceil() as u8,
+            g: (g * 255.0).ceil() as u8,
+            b: (b * 255.0).ceil() as u8,
         }
     }
 
@@ -32,7 +32,7 @@ impl Color {
         assert!((0.0..=1.0).contains(&a), "Color::rgb: a = {} (must be from 0.0 to 1.0)", a);
 
         let mut color = Self::rgb(r, g, b);
-        color.a = (a * 255.0).round() as u8;
+        color.a = (a * 255.0).ceil() as u8;
         color
     }
 
