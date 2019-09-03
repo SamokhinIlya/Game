@@ -1,9 +1,14 @@
 pub mod text;
 pub mod color;
 pub mod bitmap;
+pub mod canvas_info;
 
 use std::mem::swap;
-use crate::vector::prelude::*;
+use crate::geom::{
+    vector::prelude::*,
+    aabb::AABB,
+};
+use canvas_info::CanvasInfo;
 
 pub use color::Color;
 pub use bitmap::Bitmap;
@@ -36,6 +41,7 @@ pub fn fill_rect(dst_bmp: &Bitmap, mut min: V2i, mut max: V2i, color: Color) {
 
     for row in dst_bmp.clamped_view(min, max) {
         for pxl in row {
+            //TODO: blend
             *pxl = color.into();
         }
     }
@@ -215,5 +221,18 @@ pub fn draw_bmp(dst: &Bitmap, src: &Bitmap, p: V2i) {
 }
 
 pub fn clear(dst: &Bitmap, color: Color) {
-    fill_rect(dst, v2!(0, 0), dst.dim(), color);
+    fill_rect(dst, (0, 0).into(), dst.dim(), color);
+}
+
+pub fn aabb_to_screen(rect: AABB<f32>, canvas_info: &CanvasInfo) -> AABB<i32> {
+    let mut min = v2_to_screen(rect.min, canvas_info);
+    let mut max = v2_to_screen(rect.max, canvas_info);
+    core::mem::swap(&mut min.y, &mut max.y);
+
+    AABB { min, max }
+}
+
+pub fn v2_to_screen(v: V2f, canvas_info: &CanvasInfo) -> V2i {
+    (&canvas_info.game_to_screen_matrix * (v - canvas_info.camera) + V2::new(0.0, canvas_info.height as f32))
+        .round().into()
 }

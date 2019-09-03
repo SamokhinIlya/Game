@@ -1,10 +1,11 @@
-use core::fmt::Debug;
 use core::ops::{
     Add, AddAssign,
     Sub, SubAssign,
-    Mul, MulAssign,
+    Mul,
+    Div,
     Neg,
 };
+pub use super::num::Num32;
 
 pub mod prelude {
     pub use super::{
@@ -12,20 +13,6 @@ pub mod prelude {
         V2, V2i, V2f,
     };
 }
-
-pub trait Num32:
-    Sized + Copy + Clone
-    + Send + Sync
-    + Debug
-    + PartialEq
-    + Add<Output = Self> + AddAssign
-    + Sub<Output = Self> + SubAssign
-    + Mul<Output = Self> + MulAssign
-    + Neg<Output = Self>
-{}
-
-impl Num32 for i32 {}
-impl Num32 for f32 {}
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct V2<T: Num32> {
@@ -36,19 +23,14 @@ pub struct V2<T: Num32> {
 pub type V2i = V2<i32>;
 pub type V2f = V2<f32>;
 
-macro_rules! v2 {
-    ($x:expr, $y:expr$(,)*) => {
-        V2 { x: $x, y: $y }
-    };
-    ($val:expr) => {
-        V2 { x: $val, y: $val }
-    };
-}
-
 //TODO: add const when
 // "trait bounds other than `Sized` on const fn parameters are unstable"
 // is no more
 impl<T: Num32> V2<T> {
+    pub fn new(x: T, y: T) -> Self {
+        Self { x, y }
+    }
+
     pub fn diag(val: T) -> Self {
         Self { x: val, y: val }
     }
@@ -59,8 +41,16 @@ impl<T: Num32> V2<T> {
 }
 
 impl V2<f32> {
+    pub fn round(self) -> Self {
+        Self::map(self, f32::round)
+    }
+
     pub fn floor(self) -> Self {
         Self::map(self, f32::floor)
+    }
+
+    pub fn ceil(self) -> Self {
+        Self::map(self, f32::ceil)
     }
 
     pub fn trunc(self) -> Self {
@@ -70,13 +60,19 @@ impl V2<f32> {
 
 impl From<V2i> for V2f {
     fn from(v: V2i) -> Self {
-        Self { x: v.x as f32, y: v.y as f32 }
+        Self {
+            x: v.x as f32,
+            y: v.y as f32
+        }
     }
 }
 
 impl From<V2f> for V2i {
     fn from(v: V2f) -> Self {
-        Self { x: v.x as i32, y: v.y as i32 }
+        Self {
+            x: v.x as i32,
+            y: v.y as i32,
+        }
     }
 }
 
@@ -95,7 +91,10 @@ impl<T: Num32> Into<(T, T)> for V2<T> {
 impl<T: Num32> Add for V2<T> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        Self { x: self.x + rhs.x, y: self.y + rhs.y }
+        Self::Output {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
     }
 }
 
@@ -108,7 +107,10 @@ impl<T: Num32> AddAssign for V2<T> {
 impl<T: Num32> Sub for V2<T> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        Self { x: self.x - rhs.x, y: self.y - rhs.y }
+        Self::Output {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
     }
 }
 
@@ -121,28 +123,30 @@ impl<T: Num32> SubAssign for V2<T> {
 impl<T: Num32> Mul<T> for V2<T> {
     type Output = Self;
     fn mul(self, rhs: T) -> Self::Output {
-        Self { x: self.x * rhs, y: self.y * rhs }
+        Self::Output {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
     }
 }
 
-impl Mul<V2<i32>> for i32 {
-    type Output = V2<i32>;
-    fn mul(self, rhs: Self::Output) -> Self::Output {
-        Self::Output { x: self * rhs.x, y: self * rhs.y }
-    }
-}
-
-impl Mul<V2<f32>> for f32 {
-    type Output = V2<f32>;
-    fn mul(self, rhs: Self::Output) -> Self::Output {
-        Self::Output { x: self * rhs.x, y: self * rhs.y }
+impl<T: Num32> Div<T> for V2<T> {
+    type Output = Self;
+    fn div(self, rhs: T) -> Self::Output {
+        Self::Output {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
     }
 }
 
 impl<T: Num32> Neg for V2<T> {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        Self { x: -self.x, y: -self.y }
+        Self::Output {
+            x: -self.x,
+            y: -self.y,
+        }
     }
 }
 

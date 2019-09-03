@@ -1,31 +1,12 @@
 use std::ops::{Index, IndexMut};
 use crate::{
-    render::{self, Bitmap},
-    vector::prelude::*,
+    render::{self, Bitmap, canvas_info::CanvasInfo},
+    geom::{
+        vector::prelude::*,
+        aabb::AABB,
+    },
     file::prelude::*,
 };
-
-pub fn screen_pos_to_tilemap_pos(
-    screen_pos: V2i,
-    camera: V2f,
-    screen: V2i,
-    tile_size: i32,
-) -> V2f {
-    let x = screen_pos.x as f32 / tile_size as f32 + camera.x;
-    let y = (screen.y - screen_pos.y) as f32 / tile_size as f32 + camera.y;
-    v2!(x, y)
-}
-
-pub fn tilemap_pos_to_screen_pos(
-    tilemap_pos: V2f,
-    camera: V2f,
-    screen: V2i,
-    tile_size: i32,
-) -> V2i {
-    let x = ((tilemap_pos.x - camera.x) * tile_size as f32) as i32;
-    let y = screen.y - ((tilemap_pos.y - camera.y) * tile_size as f32) as i32;
-    v2!(x, y)
-}
 
 // TileInfo
 
@@ -33,8 +14,6 @@ pub struct TileInfo {
     pub size: i32,
     pub screen_width: f32,
     pub screen_height: f32,
-    pub screen_width_in_px: i32,
-    pub screen_height_in_px: i32,
     pub bmps: [Bitmap; 1],
 }
 
@@ -103,7 +82,7 @@ impl Tilemap {
 
     pub fn width(&self) -> i32 { self.width }
     pub fn height(&self) -> i32 { self.height }
-    pub fn dim(&self) -> V2i { v2!(self.width, self.height) }
+    pub fn dim(&self) -> V2i { (self.width, self.height).into() }
 
     fn check(&self, x: i32, y: i32) {
         assert!(
@@ -167,12 +146,12 @@ impl Tilemap {
         }
     }
 
-    pub fn draw(&self, dst: &Bitmap, camera: V2f, info: &TileInfo) {
+    pub fn draw(&self, canvas: &Bitmap, canvas_info: &CanvasInfo, tile_info: &TileInfo) {
         use std::cmp::{min, max};
 
-        let camera_i: V2i = camera.floor().into();
-        let v_draw_tiles = info.screen_height.ceil() as i32;
-        let h_draw_tiles = info.screen_width.ceil() as i32;
+        let camera_i: V2i = canvas_info.camera.floor().into();
+        let v_draw_tiles = tile_info.screen_height.ceil() as i32;
+        let h_draw_tiles = tile_info.screen_width.ceil() as i32;
 
         let lower_bound = max(camera_i.y, 0);
         let upper_bound = min(camera_i.y + v_draw_tiles, self.height - 1);
@@ -183,96 +162,65 @@ impl Tilemap {
         for tile_y in lower_bound..=upper_bound {
             for tile_x in left_bound..=right_bound {
                 let tile = self[(tile_x, tile_y)];
-                if !tile.is_visible() { continue }
+                if !tile.is_visible() {
+                    continue
+                }
 
-                let V2 { x, y } = tilemap_pos_to_screen_pos(
-                    v2!(tile_x, tile_y).into(),
-                    camera,
-                    dst.dim(),
-                    info.size,
-                );
-                render::draw_bmp(dst, info.get_bmp(tile), v2!(x, y - info.size));
+                let V2 { x, y } = render::v2_to_screen((tile_x as f32, tile_y as f32).into(), canvas_info);
+                render::draw_bmp(canvas, tile_info.get_bmp(tile), (x, y - tile_info.size).into());
             }
         }
     }
 
-    pub fn draw_outline(&self, dst: &mut Bitmap, camera: V2f, info: &TileInfo) {
-        let min: V2i = tilemap_pos_to_screen_pos(
-            v2!(0.0, self.height as f32),
-            camera,
-            dst.dim(),
-            info.size,
+    pub fn draw_outline(&self, canvas: &mut Bitmap, canvas_info: &CanvasInfo) {
+        let AABB { min, max } = render::aabb_to_screen(
+            AABB { min: (0.0, 0.0).into(), max: (self.width as f32, self.height as f32).into() },
+            canvas_info,
         );
-        let max: V2i = tilemap_pos_to_screen_pos(
-            v2!(self.width as f32, 0.0),
-            camera,
-            dst.dim(),
-            info.size,
-        );
-        render::draw_rect(dst, min, max, render::Color::YELLOW, 1);
+        render::draw_rect(canvas, min, max, render::Color::YELLOW, 1);
     }
 
-    pub fn draw_grid(&self, dst: &mut Bitmap, camera: V2f, info: &TileInfo) {
+    pub fn draw_grid(&self, canvas: &mut Bitmap, canvas_info: &CanvasInfo, tile_info: &TileInfo) {
         use std::cmp::{min, max};
         use utils::clamp;
 
         let color = render::Color::GREY;
         let thickness = 1;
 
-        let camera_i: V2i = camera.floor().into();
-        let v_draw_tiles = info.screen_height.ceil() as i32;
-        let h_draw_tiles = info.screen_width.ceil() as i32;
+        let camera_i: V2i = canvas_info.camera.floor().into();
+        let v_draw_tiles = tile_info.screen_height.ceil() as i32;
+        let h_draw_tiles = tile_info.screen_width.ceil() as i32;
 
         let lower_bound = max(camera_i.y, 1);
         let upper_bound = min(camera_i.y + v_draw_tiles + 1, self.height);
 
         for tile_y in lower_bound..upper_bound {
-            let mut min = tilemap_pos_to_screen_pos(
-                v2!(0, tile_y).into(),
-                camera,
-                dst.dim(),
-                info.size,
-            );
-            if !(0..dst.height()).contains(&min.y) {
+            let mut min = render::v2_to_screen((0., tile_y as f32).into(), canvas_info);
+            if !(0..canvas.height()).contains(&min.y) {
                 continue;
             }
-            min.x = clamp(min.x, 0, dst.width());
+            min.x = clamp(min.x, 0, canvas.width());
 
-            let mut max = tilemap_pos_to_screen_pos(
-                v2!(self.width, tile_y).into(),
-                camera,
-                dst.dim(),
-                info.size,
-            );
-            max.x = clamp(max.x, 0, dst.width());
+            let mut max = render::v2_to_screen((self.width as f32, tile_y as f32).into(), canvas_info);
+            max.x = clamp(max.x, 0, canvas.width());
 
-            render::draw_line(dst, min, max, color, thickness);
+            render::draw_line(canvas, min, max, color, thickness);
         }
 
         let left_bound = max(camera_i.x, 1);
         let right_bound = min(camera_i.x + h_draw_tiles + 1, self.width);
 
         for tile_x in left_bound..right_bound {
-            let mut min = tilemap_pos_to_screen_pos(
-                v2!(tile_x, self.height).into(),
-                camera,
-                dst.dim(),
-                info.size,
-            );
-            if !(0..dst.width()).contains(&min.x) {
+            let mut min = render::v2_to_screen((tile_x as f32, self.height as f32).into(), canvas_info);
+            if !(0..canvas.width()).contains(&min.x) {
                 continue;
             }
-            min.y = clamp(min.y, 0, dst.height());
+            min.y = clamp(min.y, 0, canvas.height());
 
-            let mut max = tilemap_pos_to_screen_pos(
-                v2!(tile_x, 0).into(),
-                camera,
-                dst.dim(),
-                info.size,
-            );
-            max.y = clamp(max.y, 0, dst.height());
+            let mut max = render::v2_to_screen((tile_x as f32, 0.).into(), canvas_info);
+            max.y = clamp(max.y, 0, canvas.height());
 
-            render::draw_line(dst, min, max, color, thickness);
+            render::draw_line(canvas, min, max, color, thickness);
         }
     }
 }

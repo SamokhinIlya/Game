@@ -2,14 +2,13 @@ use std::{
     collections::HashMap,
     path::Path,
 };
-use crate::vector::prelude::*;
+use crate::geom::vector::prelude::*;
 use super::{
     Bitmap,
     Color,
     draw_bmp,
 };
 
-//TODO: if height is smaller than 20, letters are barely visible
 pub struct FontBitmaps {
     chars: HashMap<char, Bitmap>,
     height: i32,
@@ -19,32 +18,34 @@ impl FontBitmaps {
     pub fn height(&self) -> i32 { self.height }
 
     pub fn width(&self, s: &str) -> i32 {
-        self.to_bitmaps(s).map(|bmp| bmp.width()).sum()
+        self.to_bitmaps(s).map(Bitmap::width).sum()
     }
 
     /// Draws string of text to the dst `Bitmap`
     /// 
     /// Returns width of drawn string in pixels
-    pub fn draw_string(&self, dst: &Bitmap, V2i { x, y }: V2i, s: &str) -> i32 {
-        let mut current_x = x;
-        for bmp in self.to_bitmaps(s) {
-            draw_bmp(dst, bmp, v2!(current_x, y));
-            current_x += bmp.width();
+    pub fn draw_string(&self, canvas: &Bitmap, V2i { x: start_x, y }: V2i, s: &str) -> i32 {
+        let mut x = start_x;
+        for letter in self.to_bitmaps(s) {
+            draw_bmp(canvas, letter, (x, y).into());
+            x += letter.width();
         }
-        current_x - x
+        x - start_x
     }
 
     fn to_bitmaps<'slf, 'str, 'res>(&'slf self, s: &'str str) -> impl Iterator<Item = &'res Bitmap>
         where 'slf: 'res,
               'str: 'res
     {
-        s.chars().map(move |c|
-            self.chars.get(&c).unwrap_or_else(|| panic!("No bitmap for character: {}", c))
-        )
+        s.chars().map(move |ref c| self.chars.get(c)
+            .unwrap_or_else(|| panic!("No bitmap for character: {}", c)))
     }
 
     pub fn new(filepath: impl AsRef<Path>, height: i32) -> std::io::Result<Self> {
         use rusttype::{point, FontCollection, PositionedGlyph, Scale};
+
+        const ALL_SYMBOLS: &str =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.,:;!?";
 
         let font = {
             let file = crate::file::read_entire_file(filepath)?;
@@ -54,6 +55,10 @@ impl FontBitmaps {
                 .unwrap_or_else(|e| panic!("error turning FontCollection into a Font: {}", e))
         };
 
+        let v_metrics_unscaled = font.v_metrics_unscaled();
+        let height = height as f32
+            * ((v_metrics_unscaled.ascent - v_metrics_unscaled.descent) / v_metrics_unscaled.ascent);
+        let height_px = height.ceil() as i32;
         let scale = Scale::uniform(height as f32);
 
         // The origin of a line of text is at the baseline (roughly where
@@ -64,31 +69,32 @@ impl FontBitmaps {
         let v_metrics = font.v_metrics(scale);
         let offset = point(0.0, v_metrics.ascent);
 
-        const ALL_SYMBOLS: &str =
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.,:;!?";
         let glyphs: Vec<PositionedGlyph> = font.layout(ALL_SYMBOLS, scale, offset).collect();
 
-        let mut char_bitmaps = HashMap::new();
-        for (g, ch) in glyphs.iter().zip(ALL_SYMBOLS.chars()) {
-            if let Some(bbox) = g.pixel_bounding_box() {
-                let width = bbox.max.x - bbox.min.x;
-                let mut bmp = Bitmap::with_dimensions(width, height).filled(Color::TRANSPARENT);
-                g.draw(|x, y, v| {
-                    let v = utils::clamp(v, 0.0, 1.0);
-                    let x = x as i32;
-                    let y = y as i32 + (bbox.min.y as i32);
-                    bmp[(x, y)] = Color::argb(v, 1.0, 1.0, 1.0).into();
-                });
+        let mut char_bitmaps: HashMap<char, Bitmap> = glyphs.iter().zip(ALL_SYMBOLS.chars())
+            .filter_map(|(g, ch)|
+                if let Some(bbox) = g.pixel_bounding_box() {
+                    let width = bbox.max.x - bbox.min.x;
+                    let mut bmp = Bitmap::with_dimensions(width, height_px).filled(Color::TRANSPARENT);
+                    g.draw(|x, y, v| {
+                        let v = utils::clamp(v, 0.0, 1.0);
+                        let x = x as i32;
+                        let y = y as i32 + bbox.min.y as i32;
+                        bmp[(x, y)] = Color::argb(v, 1.0, 1.0, 1.0).into();
+                    });
 
-                char_bitmaps.insert(ch, bmp);
-            }
-        }
-        let space = Bitmap::with_dimensions(height / 2, height).filled(Color::TRANSPARENT);
+                    Some((ch, bmp))
+                } else {
+                    None
+                }
+            )
+            .collect();
+        let space = Bitmap::with_dimensions(height_px / 2, height_px).filled(Color::TRANSPARENT);
         char_bitmaps.insert(' ', space);
 
         Ok(Self {
             chars: char_bitmaps,
-            height,
+            height: height_px,
         })
     }
 }
