@@ -48,7 +48,7 @@ impl FontBitmaps {
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.,:;!?";
 
         let font = {
-            let file = crate::file::read_entire_file(filepath)?;
+            let file = crate::file::read_all(filepath)?;
             let collection = FontCollection::from_bytes(file)
                 .unwrap_or_else(|e| panic!("error constructing a FontCollection from bytes: {}", e));
             collection.into_font()

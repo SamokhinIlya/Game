@@ -4,6 +4,8 @@
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::items_after_statements)]
 
 mod game;
 mod render;

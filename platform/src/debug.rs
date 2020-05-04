@@ -35,6 +35,7 @@ pub fn panic_with_last_error_message(fn_name: &str) {
             "Error message retrieval failed. GetLastError -> {}",
             unsafe { GetLastError() }
         );
+        // TODO: show message box before panicking
         unsafe { CStr::from_ptr(message_ptr.assume_init()) }.to_str()
             .unwrap_or_else(|utf8_error| {
                 panic!("Error message from {} is not valid UTF-8. Error: {}", fn_name, utf8_error);

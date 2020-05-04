@@ -35,7 +35,9 @@ pub enum Tile {
 }
 
 impl Default for Tile {
-    fn default() -> Self { Tile::Empty }
+    fn default() -> Self {
+        Tile::Empty
+    }
 }
 
 impl Tile {
@@ -227,7 +229,7 @@ impl Tilemap {
 
 /// For saving/loading to/from file
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 struct TilemapSize {
     width: u32,
     height: u32,
@@ -235,26 +237,32 @@ struct TilemapSize {
 
 impl Load for Tilemap {
     fn load(filepath: impl AsRef<Path>) -> io::Result<Self> {
-        use std::mem::{size_of, uninitialized as uninit};
+        use std::mem::size_of;
 
-        let file = crate::file::read_entire_file(filepath)?;
+        let file = crate::file::read_all(filepath)?;
 
-        #[allow(clippy::cast_ptr_alignment)]
-        let TilemapSize { width, height } = unsafe {
-            std::ptr::read_unaligned(file.as_ptr() as *const _)
+        let TilemapSize { width, height } = {
+            let mut tilemap_size = TilemapSize::default();
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    file.as_ptr(),
+                    &mut tilemap_size as *mut _ as *mut u8,
+                    size_of::<TilemapSize>(),
+                );
+            }
+            tilemap_size
         };
         let tilemap_size = (width * height) as usize;
 
         let mut map = Vec::<Tile>::with_capacity(tilemap_size);
-        map.resize_with(tilemap_size, || unsafe { uninit() });
-
-        let map_as_bytes = unsafe {
-            std::slice::from_raw_parts_mut(
+        map.resize_with(tilemap_size, Default::default);
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                file.as_ptr().add(size_of::<TilemapSize>()),
                 map.as_mut_ptr() as *mut u8,
-                tilemap_size * size_of::<Tile>()
-            )
-        };
-        map_as_bytes.copy_from_slice(&file[size_of::<TilemapSize>()..]);
+                tilemap_size * size_of::<Tile>(),
+            );
+        }
 
         Ok(Self {
             width: width as i32,
@@ -266,32 +274,32 @@ impl Load for Tilemap {
 
 impl Save for Tilemap {
     fn save(&self, filepath: impl AsRef<Path>) -> io::Result<()> {
-        use std::mem::{size_of, uninitialized as uninit};
+        use std::mem::size_of;
 
         let to_file = {
             let tilemap_size = TilemapSize {
                 width: self.width as u32,
                 height: self.height as u32,
             };
-            let tilemap_size_as_bytes = unsafe {
-                std::slice::from_raw_parts(
-                    &tilemap_size as *const _ as *const u8,
-                    size_of::<TilemapSize>(),
-                )
-            };
-            let tilemap_as_bytes = unsafe {
-                &*(self.map.as_slice() as *const _ as *const [u8])
-            };
 
             let filesize = size_of::<TilemapSize>() + self.map.len() / size_of::<Tile>();
 
             let mut bytes = Vec::<u8>::with_capacity(filesize);
-            bytes.resize_with(filesize, || unsafe { uninit() });
-
-            bytes[..size_of::<TilemapSize>()].copy_from_slice(tilemap_size_as_bytes);
-            bytes[size_of::<TilemapSize>()..].copy_from_slice(tilemap_as_bytes);
+            bytes.resize_with(filesize, Default::default);
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    &tilemap_size as *const _ as *const u8,
+                    bytes.as_mut_ptr(),
+                    size_of::<TilemapSize>(),
+                );
+                std::ptr::copy_nonoverlapping(
+                    self.map.as_ptr() as *const _ as *const u8,
+                    bytes.as_mut_ptr().add(size_of::<TilemapSize>()),
+                    self.map.len() / size_of::<Tile>(),
+                );
+            }
             bytes
         };
-        crate::file::write_bytes_to_file(filepath, to_file.as_slice())
+        crate::file::write_all(filepath, to_file.as_slice())
     }
 }

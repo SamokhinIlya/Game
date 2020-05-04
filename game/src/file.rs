@@ -18,14 +18,14 @@ pub trait Save: Sized {
     fn save(&self, filepath: impl AsRef<Path>) -> io::Result<()>;
 }
 
-pub fn read_entire_file(filepath: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+pub fn read_all(filepath: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     use std::io::Read;
     let mut v = Vec::new();
     BufReader::new(File::open(filepath)?).read_to_end(&mut v)?;
     Ok(v)
 }
 
-pub fn write_bytes_to_file(filepath: impl AsRef<Path>, bytes: &[u8]) -> io::Result<()> {
+pub fn write_all(filepath: impl AsRef<Path>, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write;
     File::create(filepath)?.write_all(bytes)
 }

@@ -6,7 +6,7 @@ use std::{
     slice,
 };
 use crate::{
-    file::{prelude::*, read_entire_file},
+    file::{prelude::*, read_all},
     geom::vector::prelude::*,
     render::Color,
 };
@@ -131,7 +131,7 @@ impl Bitmap {
         };
 
         fn load_png(filepath: impl AsRef<Path>) -> Result {
-            let mut png = lodepng::decode32(read_entire_file(filepath)?)?;
+            let mut png = lodepng::decode32(read_all(filepath)?)?;
 
             for x in &mut png.buffer {
                 let rgba = *x;
@@ -156,7 +156,7 @@ impl Bitmap {
         fn load_bmp(filepath: impl AsRef<Path>) -> Result {
             use file_header::bmp::*;
 
-            let file = read_entire_file(filepath)?;
+            let file = read_all(filepath)?;
             let header: BitmapHeader = unsafe { ptr::read_unaligned(file.as_ptr() as *const _) };
             assert!(header.BITMAPFILEHEADER.bfType == unsafe { mem::transmute(*b"BM") });
 
